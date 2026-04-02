@@ -1,0 +1,14 @@
+app_name: 赛博印钞机 Pro Ultra
+current_workspace: 新闻
+models: []
+theme: dark
+version: 2.0.0
+workspaces:
+- description: 默认工作区
+  is_active: false
+  name: default
+  path: /Users/mars/OpenClaw_Arch_Ultra/workspaces/default
+- description: ''
+  is_active: true
+  name: 新闻
+  path: /Users/mars/OpenClaw_Arch_Ultra/workspaces/新闻

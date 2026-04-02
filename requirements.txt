@@ -1,0 +1,18 @@
+
+streamlit&gt;=1.28.0
+pywebview&gt;=4.4.0
+python-dotenv&gt;=1.0.0
+notion-client&gt;=2.2.0
+requests&gt;=2.31.0
+pyyaml&gt;=6.0
+psutil&gt;=5.9.0
+
+# 浏览器自动化
+selenium&gt;=4.15.0
+playwright&gt;=1.40.0
+webdriver-manager&gt;=4.0.1
+
+# 新增：核心依赖
+numpy&gt;=1.24.0
+pandas&gt;=2.0.0
+httpx&gt;=0.25.0
