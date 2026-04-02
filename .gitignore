@@ -54,3 +54,4 @@ Thumbs.db
 
 # Trae IDE
 .trae/
+node_modules/

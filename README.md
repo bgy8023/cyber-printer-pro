@@ -1,7 +1,7 @@
 
 # 赛博印钞机 Pro 终极优化版 V2.2
 
-基于 Claude Code 51.2 万行泄露源码原生实现，结合 Trae 双引擎，打造工业级网文自动化创作全链路系统。
+基于 Claude Code 51.2 万行泄露源码原生实现，支持多种 LLM 后端（OpenAI/Anthropic/本地模型），打造工业级网文自动化创作全链路系统。
 
 ## ✨ 核心功能
 
@@ -23,7 +23,8 @@
 - **Undercover Mode 卧底模式**：从思维链底层规避 AI 写作特征，原生反 AI 检测，平台零拦截
 - **结构化记忆系统**：三层上下文压缩机制，自动记录人设、剧情、伏笔，彻底解决吃书问题
 - **Kairos 持久守护进程**：后台休眠运行，到点自动唤醒生成，零 CPU 占用，支持异常重启
-- **Trae 双引擎对接**：无缝对接 Trae 的多模型能力、MCP 工具链，支持 Notion/GitHub/ 全网搜索
+- **多 LLM 后端支持**：统一适配器支持 OpenAI、Anthropic Claude、Ollama 本地模型，灵活切换
+- **LLM 适配器系统**：统一接口封装多种 LLM 后端，自动重试、流式生成、错误处理
 - **全链路自动化**：生成→去 AI 化→记忆更新→GitHub 归档→Notion 分发，全流程无人值守
 
 ## 🚀 快速开始
@@ -31,7 +32,7 @@
 ### 前置要求
 - macOS 10.15+（支持 Intel/Apple Silicon）
 - Python 3.10+
-- Trae IDE 最新版
+- LLM API 密钥（OpenAI/Anthropic）或本地 Ollama 模型
 - Homebrew
 
 ### 一键启动
@@ -90,6 +91,7 @@ OpenClaw_Arch_Ultra/
 ├── install_daemon.sh              # 🆕 launchd 安装脚本
 ├── package.json                   # 🆕 Node.js 依赖配置
 ├── .env                           # 环境变量配置
+├── .env.example                   # 环境变量配置模板
 ├── .gitignore                     # Git忽略文件
 ├── requirements.txt               # Python依赖清单
 ├── cyber_printer_ultimate.py      # 核心生成主脚本 (V2.2)
@@ -105,8 +107,34 @@ OpenClaw_Arch_Ultra/
    cp .env.example .env
    ```
 
-2. **填写配置**
-   - `TRAE_API_KEY`：Trae IDE API Key
+2. **填写 LLM 配置（必填）**
+   
+   选择一种 LLM 后端配置：
+   
+   **方案 A：OpenAI（推荐）**
+   ```bash
+   LLM_PROVIDER=openai
+   OPENAI_API_KEY="your-openai-api-key"
+   OPENAI_MODEL=gpt-4
+   # 可选：使用第三方代理
+   # OPENAI_BASE_URL="https://api.openai.com/v1"
+   ```
+   
+   **方案 B：Anthropic Claude**
+   ```bash
+   LLM_PROVIDER=anthropic
+   ANTHROPIC_API_KEY="your-anthropic-api-key"
+   ANTHROPIC_MODEL=claude-3-sonnet-20240229
+   ```
+   
+   **方案 C：本地 Ollama（完全免费，需要 GPU）**
+   ```bash
+   LLM_PROVIDER=ollama
+   OLLAMA_BASE_URL=http://localhost:11434
+   OLLAMA_MODEL=llama2
+   ```
+   
+3. **填写其他配置**
    - `NOTION_TOKEN`：Notion API Token
    - `NOTION_DATABASE_ID`：Notion 数据库 ID
    - `GITHUB_TOKEN`：GitHub Personal Access Token

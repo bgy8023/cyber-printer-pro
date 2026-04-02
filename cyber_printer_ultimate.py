@@ -2,8 +2,8 @@
 #!/usr/bin/env python3
 """
 赛博印钞机 Pro 终极优化版 V2.1
-Claude泄露源码+Trae双引擎，工业级网文自动化创作全链路
-新增：配置管理、性能监控、智能优化
+基于 Claude 泄露源码原生实现，工业级网文自动化创作全链路
+新增：配置管理、性能监控、智能优化、多 LLM 后端支持
 """
 import os
 import sys
@@ -23,7 +23,13 @@ ENV_FILE = os.path.join(BASE_DIR, ".env")
 load_dotenv(ENV_FILE)
 
 
-TRAE_API_KEY = os.getenv("TRAE_API_KEY")
+# LLM 配置
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama2")
+
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -36,7 +42,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(MEMORY_DIR, exist_ok=True)
 
 
-engine = get_dispatcher(trae_api_key=TRAE_API_KEY)
+engine = get_dispatcher(llm_provider=LLM_PROVIDER)
 config = ConfigManager()
 metrics = MetricsCollector()
 

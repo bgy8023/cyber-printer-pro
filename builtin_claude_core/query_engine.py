@@ -5,6 +5,7 @@ import time
 from typing import List, Dict, Any, Optional
 from .logger import logger
 from .semantic_memory import semantic_memory
+from .llm_adapter import get_llm_adapter
 
 
 class ClaudeQueryEngine:
@@ -12,12 +13,14 @@ class ClaudeQueryEngine:
     Claude Code泄露源码原生实现的QueryEngine核心推理引擎
     负责：多智能体调度、结构化记忆管理、上下文压缩、Undercover Mode底层处理
     """
-    def __init__(self, trae_api_key: Optional[str] = None):
+    def __init__(self, llm_provider: Optional[str] = None):
         self.memory_store: Dict[str, Any] = {}
         self.agent_pool: Dict[str, Any] = {}
         self.undercover_mode = True
         self.max_retry = 3
         self.timeout = 300
+        # 初始化 LLM 适配器
+        self.llm_adapter = get_llm_adapter(provider_type=llm_provider)
         logger.info("✅ Claude QueryEngine 初始化完成")
 
     def load_memory(self, memory_dir: str):
@@ -258,14 +261,20 @@ class ClaudeQueryEngine:
         return final_result
 
     def _call_agent(self, agent_name: str, prompt: str) -> str:
-        """调用子Agent，带超时重试机制（占位实现，等待后续与Trae对接）"""
-        logger.warning(f"⚠️ {agent_name}：当前使用占位实现，请与Trae API对接")
+        """调用子Agent，使用 LLM 适配器生成内容"""
+        logger.info(f"🤖 {agent_name}：正在调用 LLM 生成内容...")
         for i in range(self.max_retry):
             try:
-                time.sleep(1)
-                content = f"【{agent_name}占位输出】\n这是{agent_name}的模拟输出内容，用于测试流程。"
+                content = self.llm_adapter.generate(
+                    prompt=prompt,
+                    temperature=0.7,
+                    max_tokens=4000,
+                    timeout=self.timeout,
+                    max_retries=1
+                )
                 if not content:
                     raise Exception("生成内容为空")
+                logger.info(f"✅ {agent_name}：内容生成完成")
                 return content
             except Exception as e:
                 logger.error(f"❌ {agent_name} 第{i+1}次调用失败：{str(e)}", exc_info=True)

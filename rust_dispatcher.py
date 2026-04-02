@@ -12,18 +12,22 @@ from typing import Dict, Any, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from builtin_claude_core.logger import logger
 from builtin_claude_core.query_engine import ClaudeQueryEngine
+from builtin_claude_core.llm_adapter import get_llm_adapter
 
 class RustCoreDispatcher:
     """
     核心分配器：优先拉起 Rust 物理加速引擎，失败则自动回退到 Python 原生
     完全物理隔离，零 ABI 兼容问题，零重写工作量
     """
-    def __init__(self, trae_api_key: Optional[str] = None):
-        self.trae_api_key = trae_api_key
+    def __init__(self, llm_provider: Optional[str] = None):
+        self.llm_provider = llm_provider
         self.os_type = os.name
         self.rust_binary = self._get_binary_path()
         self.workspace = os.path.expanduser("~/.cyberprinter/workspace")
         os.makedirs(self.workspace, exist_ok=True)
+        
+        # 初始化 LLM 适配器
+        self.llm_adapter = get_llm_adapter(provider_type=llm_provider)
         
         # 检查是否有 Rust 核心
         self.has_rust_core = os.path.exists(self.rust_binary) and os.access(self.rust_binary, os.X_OK)
@@ -33,7 +37,7 @@ class RustCoreDispatcher:
         else:
             logger.warning("⚠️  未检测到 Rust 核心，使用 Python 原生引擎（性能模式未激活）")
             # 初始化 Python 原生引擎（降级预案）
-            self.python_engine = ClaudeQueryEngine(trae_api_key=trae_api_key)
+            self.python_engine = ClaudeQueryEngine(llm_provider=llm_provider)
 
     def _get_binary_path(self) -> str:
         """智能寻址：动态获取不同平台下编译好的 Rust 核心文件"""
@@ -106,7 +110,7 @@ class RustCoreDispatcher:
                 "target_words": target_words,
                 "multi_agent": True,
                 "undercover_mode": True,
-                "trae_api_key": self.trae_api_key
+                "llm_provider": self.llm_provider
             },
             "context": {
                 "memory": relevant_memory,
@@ -188,7 +192,7 @@ class RustCoreDispatcher:
         
         # 确保 Python 引擎已初始化
         if not hasattr(self, 'python_engine'):
-            self.python_engine = ClaudeQueryEngine(trae_api_key=self.trae_api_key)
+            self.python_engine = ClaudeQueryEngine(llm_provider=self.llm_provider)
         
         # 直接调用你现有的 Python 原生引擎
         return self.python_engine.multi_agent_coordinate(
@@ -317,9 +321,10 @@ class RustCoreDispatcher:
 # 全局单例
 _dispatcher: Optional[RustCoreDispatcher] = None
 
-def get_dispatcher(trae_api_key: Optional[str] = None) -> RustCoreDispatcher:
+
+def get_dispatcher(llm_provider: Optional[str] = None) -> RustCoreDispatcher:
     """获取全局单例的离合器"""
     global _dispatcher
     if _dispatcher is None:
-        _dispatcher = RustCoreDispatcher(trae_api_key=trae_api_key)
+        _dispatcher = RustCoreDispatcher(llm_provider=llm_provider)
     return _dispatcher
