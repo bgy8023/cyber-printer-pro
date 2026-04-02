@@ -16,3 +16,4 @@ webdriver-manager&gt;=4.0.1
 numpy&gt;=1.24.0
 pandas&gt;=2.0.0
 httpx&gt;=0.25.0
+filelock&gt;=3.13.0
