@@ -18,7 +18,6 @@
   "author": "Cyber Printer Team",
   "license": "MIT",
   "dependencies": {
-    "x-crawl": "^1.6.0",
     "axios": "^1.6.0",
     "cheerio": "^1.0.0-rc.12",
     "jsdom": "^22.1.0",

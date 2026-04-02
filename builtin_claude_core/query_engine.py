@@ -19,9 +19,18 @@ class ClaudeQueryEngine:
         self.undercover_mode = True
         self.max_retry = 3
         self.timeout = 300
+        self.llm_provider = llm_provider
         # 初始化 LLM 适配器
-        self.llm_adapter = get_llm_adapter(provider_type=llm_provider)
+        self._init_llm_adapter()
         logger.info("✅ Claude QueryEngine 初始化完成")
+    
+    def _init_llm_adapter(self):
+        """初始化或重新初始化 LLM 适配器"""
+        from .llm_adapter import reset_llm_adapter
+        reset_llm_adapter()
+        self.llm_adapter = get_llm_adapter(provider_type=self.llm_provider)
+        logger.info(f"✅ LLM 适配器已初始化，提供商: {os.getenv('LLM_PROVIDER', 'unknown')}")
+        logger.info(f"✅ 使用模型: {os.getenv('LLM_MODEL_NAME', os.getenv('OPENAI_MODEL', 'unknown'))}")
 
     def load_memory(self, memory_dir: str):
         """
@@ -146,12 +155,25 @@ class ClaudeQueryEngine:
         """
         return undercover_prompt
 
+    def refresh_llm_adapter(self):
+        """刷新 LLM 适配器，使用最新的环境变量配置"""
+        logger.info("🔄 正在刷新 LLM 适配器，使用最新配置...")
+        self._init_llm_adapter()
+    
     def multi_agent_coordinate(self, chapter_num: int, target_words: int, custom_prompt: str, relevant_memory: str) -> Dict[str, Any]:
         """
         多智能体协调调度，参考Claude源码Coordinator模式
         分工：大纲Agent→主笔Agent→审核Agent→润色Agent，流水线式创作
         """
         logger.info("🤖 多智能体协调模式已激活")
+        
+        # 检查 LLM 适配器是否初始化，没有的话才初始化
+        if not hasattr(self, 'llm_adapter') or self.llm_adapter is None:
+            logger.info("🔄 LLM 适配器未初始化，正在初始化...")
+            self._init_llm_adapter()
+        else:
+            logger.info("✅ 使用已初始化的 LLM 适配器")
+        
         final_result = {
             "outline": "",
             "content": "",
@@ -263,8 +285,11 @@ class ClaudeQueryEngine:
     def _call_agent(self, agent_name: str, prompt: str) -> str:
         """调用子Agent，使用 LLM 适配器生成内容"""
         logger.info(f"🤖 {agent_name}：正在调用 LLM 生成内容...")
+        logger.info(f"📝 提示词长度：{len(prompt)} 字符")
+        
         for i in range(self.max_retry):
             try:
+                logger.info(f"🔄 {agent_name}：第{i+1}次尝试...")
                 content = self.llm_adapter.generate(
                     prompt=prompt,
                     temperature=0.7,
@@ -274,13 +299,185 @@ class ClaudeQueryEngine:
                 )
                 if not content:
                     raise Exception("生成内容为空")
-                logger.info(f"✅ {agent_name}：内容生成完成")
+                logger.info(f"✅ {agent_name}：内容生成完成，{len(content)} 字符")
                 return content
             except Exception as e:
                 logger.error(f"❌ {agent_name} 第{i+1}次调用失败：{str(e)}", exc_info=True)
                 if i == self.max_retry - 1:
-                    raise Exception(f"{agent_name}调用失败，已达最大重试次数")
+                    error_msg = f"{agent_name}调用失败，已达最大重试次数\n"
+                    error_msg += f"可能原因：\n"
+                    error_msg += f"1. API Key 是否正确？\n"
+                    error_msg += f"2. Base URL 是否正确？\n"
+                    error_msg += f"3. 模型名称是否正确？\n"
+                    error_msg += f"4. API 服务是否正常？\n"
+                    error_msg += f"错误详情：{str(e)}"
+                    raise Exception(error_msg)
+                logger.info(f"⏳ 等待2秒后重试...")
                 time.sleep(2)
+
+    def humanize_text(self, text: str) -> str:
+        """
+        超强 Humanizer 去AI化润色
+        基于维基百科 "Signs of AI writing" 指南和行业最佳实践
+        将 AI 生成的文本转化为自然的人类写作风格
+        """
+        logger.info("🧹 超强 Humanizer：开始去AI化润色")
+        
+        humanize_prompt = self.undercover_process(f"""【角色定义】
+你是一位拥有15年经验的资深网文编辑，同时也是网文心理学专家。你深谙中文网文的读者心理、节奏把控和写作技巧。
+
+【核心任务】
+对下面的小说正文进行深度去AI化润色，让它看起来、读起来都像是一位有经验的真人作者写的。
+
+【维基百科 AI 写作特征去除清单】
+
+### 第一阶段：内容模式修复
+1. **去除过度强调重要性**：
+   - 去掉"标志着/代表着/见证着/是转折点/重要时刻/关键作用"等
+   - 去掉"反映了更广泛的趋势/象征着持久的贡献/为...奠定基础"
+   - 改为直接叙述事实
+
+2. **去除过度强调知名度**：
+   - 去掉"被多家媒体报道/独立报道/社会广泛关注"
+   - 去掉"拥有大量粉丝/活跃的社交媒体"
+   - 改为具体的一个引用或场景
+
+3. **去除肤浅的 -ing 分析**：
+   - 去掉"强调着/确保着/反映着/象征着..."
+   - 改为直接的陈述句
+
+4. **去除模糊的归属**：
+   - 去掉"有人说/人们认为/众所周知/据说..."
+   - 要么具体到人，要么直接陈述
+
+5. **去除破折号滥用**：
+   - AI 喜欢用 — 来连接，改成逗号、句号或重新组织
+
+6. **去除三段式套路**：
+   - AI 喜欢"首先/其次/最后""一方面/另一方面"
+   - 改成自然的叙述流
+
+### 第二阶段：语言和语法修复
+7. **替换AI高频词汇**：
+   - 去掉：此外、与之相一致、至关重要、深入探讨、因此、从而、进而、
+     鉴于、基于、鉴于此、综上所述、总而言之、据此
+   - 换成自然的中文连接：而且、不过、其实、话说回来、当然、
+     你还别说、有意思的是
+
+8. **去除否定平行结构**：
+   - 去掉"不是...而是...""与其...不如..."
+   - 改成更自然的表达
+
+9. **去除过度的连接短语**：
+   - 去掉：此外、再者、更进一步、更重要的是
+   - 让段落自然流动
+
+### 第三阶段：段落和结构修复
+10. **混合句子长度**：
+    - 不要所有句子都是差不多长
+    - 短句：有力、冲击
+    - 长句：细腻、铺垫
+    - 交替使用
+
+11. **段落不要太规整**：
+    - AI 喜欢每个段落长度差不多
+    - 有的段落一句话，有的段落很详细
+    - 制造节奏变化
+
+12. **加入一点"凌乱"**：
+    - 完美的结构反而像AI
+    - 可以有一个小的题外话、回忆片段
+    - 可以有一个未完成的想法、伏笔
+
+### 第四阶段：人格和灵魂注入（最重要！）
+13. **加入观点和情绪**：
+    - 不要中立的报道
+    - "我觉得这件事有点奇怪" 比 "这件事很奇怪" 更像人
+    - 角色可以有犹豫、矛盾、小偏见
+
+14. **承认复杂性**：
+    - 人类有混合情绪
+    - "这很爽，但也有点不安" 比 "这很爽" 更真实
+
+15. **用第一人称视角（如果合适）**：
+    - 主角的内心戏用"我"
+    - "我心里咯噔一下" 比 "他心里咯噔一下" 更有代入感
+
+16. **让一些"不完美"存在**：
+    - 可以有口语化表达
+    - 可以有重复（但不要太多）
+    - 可以有逻辑上的"毛边"
+
+17. **加入感官细节**：
+    - 不仅写视觉，还要写听觉、嗅觉、触觉、味觉
+    - "血腥味涌上来" 比 "他闻到血腥味" 更生动
+
+### 第五阶段：中文网文专属优化
+18. **对话优化**：
+    - 不要每个人说话都像播音员
+    - 有的人口头禅多，有的人话少
+    - 可以有打断、抢话、结巴
+    - 可以有没说完的话
+
+19. **节奏把控**：
+    - 战斗/紧张场景：短句多，段落短
+    - 抒情/铺垫场景：长句多，段落长
+    - 一张一弛
+
+20. **加入网文元素**：
+    - 可以有一句吐槽（如果符合人设）
+    - 可以有一个"伏笔感"的句子
+    - 可以有角色的内心吐槽
+
+【硬性规则】
+- ✅ 严格保留：原剧情、人设、爽点、关键信息
+- ✅ 尽量保持：总字数（±10%）
+- ❌ 不要输出：任何解释、说明、备注
+- ❌ 不要改变：故事走向、角色性格
+- ✅ 只输出：润色后的完整正文
+
+【小说正文】
+{text}
+
+【输出要求】
+直接开始输出润色后的正文，不要任何开场白。""")
+        
+        try:
+            humanized_content = self._call_agent("超强润色Agent", humanize_prompt)
+            logger.info("✅ 超强 Humanizer：去AI化润色完成")
+            
+            # 二次反AI检查（可选但推荐）
+            final_check_prompt = self.undercover_process(f"""【反AI最终检查】
+读下面这段文字，简要回答：
+1. 这段话里还有哪些明显的AI痕迹？（列出1-3点）
+2. 只列问题，不要修改
+
+【待检查文本】
+{humanized_content}""")
+            
+            logger.info("🔍 进行最终反AI检查...")
+            ai_check_result = self._call_agent("反AI检查员", final_check_prompt)
+            logger.info(f"📋 反AI检查结果：{ai_check_result[:200]}")
+            
+            # 如果检查出问题，再润色一次（但不强制，避免死循环）
+            if "AI痕迹" in ai_check_result or "痕迹" in ai_check_result:
+                logger.info("🔄 发现AI痕迹，进行最终微调...")
+                final_polish_prompt = self.undercover_process(f"""【最终微调】
+刚才的润色还有这些AI痕迹，再微调一下，不要改动剧情：
+{ai_check_result}
+
+【原文】
+{humanized_content}
+
+只输出修改后的正文。""")
+                humanized_content = self._call_agent("微调Agent", final_polish_prompt)
+                logger.info("✅ 最终微调完成")
+            
+            return humanized_content
+        except Exception as e:
+            logger.error(f"❌ 超强 Humanizer 润色失败：{str(e)}", exc_info=True)
+            logger.warning("⚠️ Humanizer 失败，返回原文")
+            return text
 
     @staticmethod
     def _count_real_chars(text: str) -> int:

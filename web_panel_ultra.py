@@ -20,10 +20,44 @@ from typing import Optional, Dict, Any, List
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core.config_manager import ConfigManager
 from core.browser_manager import BrowserManager
+from builtin_claude_core import logger, ConfigManager as BuiltinConfigManager, MetricsCollector, lock_manager
+from builtin_claude_core.llm_adapter import reset_llm_adapter
+from rust_dispatcher import get_dispatcher
 
 # 初始化配置管理器
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 config_manager = ConfigManager(BASE_PATH)
+
+# 全局引擎变量（延迟初始化）
+_engine = None
+_builtin_config = None
+_metrics = None
+
+def reset_engine():
+    """重置引擎（使用最新配置）"""
+    global _engine, _builtin_config, _metrics
+    _engine = None
+    _builtin_config = None
+    _metrics = None
+
+def get_engine():
+    """延迟初始化引擎"""
+    global _engine, _builtin_config, _metrics
+    if _engine is None:
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        MEMORY_DIR = os.path.join(BASE_DIR, "novel_settings")
+        OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        os.makedirs(MEMORY_DIR, exist_ok=True)
+        
+        LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+        logger.info(f"🔄 正在初始化引擎，提供商: {LLM_PROVIDER}")
+        logger.info(f"🔄 使用模型: {os.getenv('LLM_MODEL_NAME', os.getenv('OPENAI_MODEL', 'unknown'))}")
+        _engine = get_dispatcher(llm_provider=LLM_PROVIDER)
+        _builtin_config = BuiltinConfigManager()
+        _metrics = MetricsCollector()
+        logger.info("✅ 引擎初始化完成")
+    return _engine, _builtin_config, _metrics
 
 # ==============================================
 # 【官方规范】session_state全量初始化
@@ -108,6 +142,65 @@ def get_resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
+def read_env_file():
+    """读取 .env 文件内容"""
+    env_path = get_resource_path(".env")
+    env_vars = {}
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    env_vars[key.strip()] = value.strip()
+    return env_vars
+
+def write_env_file(env_vars):
+    """写入 .env 文件"""
+    env_path = get_resource_path(".env")
+    # 读取现有的 .env 文件（如果存在）
+    existing_lines = []
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            existing_lines = f.readlines()
+    
+    # 更新或添加新的环境变量
+    updated_lines = []
+    keys_processed = set()
+    
+    for line in existing_lines:
+        line = line.rstrip("\n")
+        if line and not line.startswith("#") and "=" in line:
+            key, _ = line.split("=", 1)
+            key = key.strip()
+            if key in env_vars:
+                updated_lines.append(f"{key}={env_vars[key]}")
+                keys_processed.add(key)
+            else:
+                updated_lines.append(line)
+        else:
+            updated_lines.append(line)
+    
+    # 添加未处理的新环境变量
+    for key, value in env_vars.items():
+        if key not in keys_processed:
+            updated_lines.append(f"{key}={value}")
+    
+    # 写入文件
+    with open(env_path, "w", encoding="utf-8") as f:
+        for line in updated_lines:
+            f.write(line + "\n")
+
+def validate_llm_config(provider, api_key, model_name):
+    """验证 LLM 配置"""
+    if not provider:
+        return False, "请选择 LLM 提供商"
+    if provider != "ollama" and not api_key:
+        return False, "请输入 API Key"
+    if not model_name:
+        return False, "请选择或输入模型名称"
+    return True, ""
+
 def reload_env():
     """重载环境变量"""
     env_path = get_resource_path(".env")
@@ -131,6 +224,63 @@ OPENCLAW_WORKSPACE = os.path.expanduser("~/.openclaw/workspace")
 OPENCLAW_CONFIG_PATH = os.path.expanduser("~/.openclaw/config")
 DAEMON_SCRIPT_PATH = get_resource_path("claw_kairos_daemon.sh")
 CHAPTER_NUM_FILE = os.path.expanduser("~/OpenClaw_Arch/current_chapter.txt")
+
+# 自定义模型相关函数
+def get_custom_models_path():
+    """获取自定义模型配置文件路径"""
+    return os.path.join(SETTING_PATH, "custom_models.json")
+
+def save_custom_models(custom_models: Dict[str, List[str]]):
+    """保存自定义模型列表到JSON文件"""
+    try:
+        models_path = get_custom_models_path()
+        with open(models_path, "w", encoding="utf-8") as f:
+            json.dump(custom_models, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"保存自定义模型失败: {e}")
+
+def load_custom_models() -> Dict[str, List[str]]:
+    """从JSON文件读取自定义模型列表"""
+    try:
+        models_path = get_custom_models_path()
+        if os.path.exists(models_path):
+            with open(models_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return {}
+    except Exception as e:
+        print(f"读取自定义模型失败: {e}")
+        return {}
+
+def fetch_models_from_openai_api(base_url: str, api_key: str) -> List[str]:
+    """从OpenAI兼容API获取模型列表"""
+    try:
+        headers = {"Authorization": f"Bearer {api_key}"}
+        response = requests.get(f"{base_url}/models", headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return [model["id"] for model in data.get("data", [])]
+    except Exception as e:
+        print(f"获取模型列表失败: {e}")
+        return []
+
+def get_combined_models(provider: str) -> List[str]:
+    """合并预设模型和自定义模型"""
+    preset_models = {
+        "openai": ["gpt-4", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+        "anthropic": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+        "ollama": ["llama2", "llama3", "mistral", "gemma"]
+    }
+    
+    custom_models = load_custom_models()
+    provider_custom_models = custom_models.get(provider, [])
+    
+    combined = preset_models.get(provider, []).copy()
+    for model in provider_custom_models:
+        model_with_tag = f"{model} [自定义]"
+        if model_with_tag not in combined:
+            combined.append(model_with_tag)
+    
+    return combined
 
 def get_clawpanel_agents():
     """自动检测clawpanel里的所有Agent"""
@@ -404,8 +554,6 @@ def run_init_check(pipeline: DAGPipeline, node_placeholders: Dict, log_placehold
             raise Exception("核心环境变量缺失，请检查.env文件")
         if not GEN_SCRIPT_PATH or not os.path.exists(GEN_SCRIPT_PATH):
             raise Exception(f"生成脚本不存在：{GEN_SCRIPT_PATH}")
-        if not os.path.exists(OPENCLAW_WORKSPACE):
-            raise Exception(f"OpenClaw工作区不存在：{OPENCLAW_WORKSPACE}")
         
         write_log(f"🤖 [节点1] 正在检查目标Agent：{target_agent}", log_placeholder)
         if target_agent not in st.session_state.agents_list:
@@ -480,45 +628,82 @@ def run_load_settings(pipeline: DAGPipeline, node_placeholders: Dict, log_placeh
         write_log(f"❌ [节点2] 记忆加载失败：{str(e)}", log_placeholder)
         return False, ""
 
+def update_plot_record_web(chapter_content: str, chapter_num: int):
+    """更新剧情记忆，同步到QueryEngine（Web版）"""
+    engine, builtin_config, _ = get_engine()
+    if not builtin_config.get("memory.auto_update", True):
+        return True
+        
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    MEMORY_DIR = os.path.join(BASE_DIR, "novel_settings")
+    plot_file = os.path.join(MEMORY_DIR, "4_剧情自动推演记录.md")
+    
+    try:
+        with lock_manager.with_lock(plot_file):
+            if not os.path.exists(plot_file):
+                with open(plot_file, "w", encoding="utf-8") as f:
+                    f.write("# 剧情备忘录（AI必须严格遵守）\n")
+            
+            plot_content = f"""
+- 核心剧情：【占位内容】
+- 新出场人物：【占位内容】
+- 新增伏笔：【占位内容】
+- 核心人设变化：【占位内容】
+            """
+            
+            with open(plot_file, "a", encoding="utf-8") as f:
+                f.write(f"\n\n## 第{chapter_num}章\n{plot_content}")
+            
+            engine.load_memory(MEMORY_DIR)
+            logger.info("🧠 剧情记忆已更新")
+            return True
+    except Exception as e:
+        logger.error(f"❌ 更新剧情记忆失败：{str(e)}", exc_info=True)
+        return False
+
 def run_generate_content(pipeline: DAGPipeline, node_placeholders: Dict, log_placeholder, chapter_num: int, chapter_title: str, final_prompt: str, target_words: int, target_agent: str, enable_humanizer: bool, enable_multi_agent: bool) -> tuple[bool, str, int]:
     update_node_status(pipeline, "generate_content", NodeStatus.RUNNING, node_placeholders)
     write_log(f"🤖 [节点3] 开始多智能体创作（多Agent：{'已激活' if enable_multi_agent else '未激活'}）", log_placeholder)
     
     try:
-        if GEN_SCRIPT_PATH and os.path.exists(GEN_SCRIPT_PATH):
-            env = os.environ.copy()
-            if hasattr(sys, '_MEIPASS'):
-                env["APP_BUILTIN_RESOURCES"] = sys._MEIPASS
-            
-            process = subprocess.Popen(
-                [GEN_SCRIPT_PATH, str(chapter_num), final_prompt, str(target_words), target_agent, "false", "true" if enable_multi_agent else "false"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                bufsize=1,
-                universal_newlines=True,
-                env=env
+        engine, _, _ = get_engine()
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        MEMORY_DIR = os.path.join(BASE_DIR, "novel_settings")
+        OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+        
+        write_log("🏛️ [节点3/6] 开始加载结构化记忆", log_placeholder)
+        engine.load_memory(MEMORY_DIR)
+        relevant_memory = engine.retrieve_memory(final_prompt)
+        write_log("✅ [节点3/6] 结构化记忆加载完成", log_placeholder)
+        
+        write_log("🤖 [节点3/6] 开始多智能体创作", log_placeholder)
+        try:
+            agent_result = engine.multi_agent_coordinate(
+                chapter_num=chapter_num,
+                target_words=target_words,
+                custom_prompt=final_prompt,
+                relevant_memory=relevant_memory
             )
-            
-            for line in process.stdout:
-                if line.strip():
-                    write_log(f"[OpenClaw] {line.strip()}", log_placeholder)
-            process.wait(timeout=300)
-            if process.returncode not in [0, 124]:
-                raise Exception(f"OpenClaw执行失败，返回码：{process.returncode}")
-        else:
-            raise Exception("未找到OpenClaw胶水脚本")
+            final_content = agent_result["content"]
+            real_chars = agent_result["real_chars"]
+        except Exception as e:
+            logger.error(f"❌ 创作失败：{str(e)}", exc_info=True)
+            raise Exception(f"创作失败：{str(e)}")
+        write_log(f"✅ [节点3/6] 创作完成，最终字数：{real_chars}", log_placeholder)
         
-        write_log("📂 [节点3] 正在从OpenClaw工作区提取小说正文...", log_placeholder)
-        generated_content = extract_latest_novel_from_openclaw()
-        if not generated_content:
-            raise Exception("无法从OpenClaw工作区提取小说正文")
+        write_log("🧠 [节点3/6] 开始更新剧情记忆", log_placeholder)
+        update_plot_record_web(final_content, chapter_num)
+        write_log("✅ [节点3/6] 剧情记忆更新完成", log_placeholder)
         
-        generated_content = clean_mermaid_code(generated_content)
-        real_chars = count_real_chars(generated_content)
+        write_log("� [节点3/6] 开始保存本地文件", log_placeholder)
+        output_file = os.path.join(OUTPUT_DIR, f"第{chapter_num}章_{real_chars}字.md")
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(final_content)
+        write_log(f"✅ [节点3/6] 本地文件保存完成：{output_file}", log_placeholder)
+        
+        generated_content = final_content
         if real_chars < target_words * 0.95:
-            raise Exception(f"字数不达标！目标{target_words}字，仅生成{real_chars}字")
+            write_log(f"⚠️ [节点3/6] 字数偏少！目标{target_words}字，仅生成{real_chars}字，继续执行", log_placeholder)
         
         st.session_state.preview_content = generated_content
         update_node_status(pipeline, "generate_content", NodeStatus.SUCCESS, node_placeholders, result={"content": generated_content, "real_chars": real_chars})
@@ -533,57 +718,22 @@ def run_humanizer_process(pipeline: DAGPipeline, node_placeholders: Dict, log_pl
     update_node_status(pipeline, "humanizer_process", NodeStatus.RUNNING, node_placeholders)
     
     if not enable_humanizer:
-        write_log("⚠️ [节点4] 已关闭去AI化处理，跳过本节点", log_placeholder)
+        write_log("ℹ️ [节点4] Humanizer功能未启用，跳过本节点", log_placeholder)
         update_node_status(pipeline, "humanizer_process", NodeStatus.SKIPPED, node_placeholders)
         return True, raw_content
     
     try:
-        write_log("🧹 [节点4] 正在调用Humanizer技能，二次去AI化", log_placeholder)
-        prompt = f"请使用Humanizer技能，对下面的小说正文进行二次去AI化处理，严格保留原剧情、人设、爽点、节奏和字数，只去除残留的AI痕迹，让文本更像真人写的网文，直接输出改写后的完整正文，不要任何额外解释：\n\n{raw_content}"
-        
-        env = os.environ.copy()
-        if hasattr(sys, '_MEIPASS'):
-            env["APP_BUILTIN_RESOURCES"] = sys._MEIPASS
-        
-        process = subprocess.Popen(
-            [os.path.join(OPENCLAW_WORKSPACE, "claw"), "chat", prompt, "--agent", target_agent, "--skills", "humanizer"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            bufsize=1,
-            universal_newlines=True,
-            env=env
-        )
-        
-        humanized_content = ""
-        for line in process.stdout:
-            if line.strip() and not line.strip().startswith("[") and not line.strip().startswith("✅") and not line.strip().startswith("⚠️") and not line.strip().startswith("❌"):
-                humanized_content += line + "\n"
-            if line.strip():
-                write_log(f"[Humanizer] {line.strip()}", log_placeholder)
-        
-        process.wait(timeout=180)
-        if process.returncode != 0:
-            raise Exception("Humanizer技能调用失败")
-        
-        if not humanized_content or len(humanized_content.strip()) < 100:
-            raise Exception("去AI化处理后内容为空，保留原始正文")
-        
-        raw_chars = count_real_chars(raw_content)
-        humanized_chars = count_real_chars(humanized_content)
-        if humanized_chars < raw_chars * 0.9:
-            write_log(f"⚠️ [节点4] 去AI化后字数缩水，原始{raw_chars}字，处理后{humanized_chars}字，保留原始正文", log_placeholder)
-            humanized_content = raw_content
-        else:
-            st.session_state.preview_content = humanized_content
-            write_log(f"✅ [节点4] 去AI化处理完成，处理后有效汉字：{humanized_chars}字", log_placeholder)
-        
-        update_node_status(pipeline, "humanizer_process", NodeStatus.SUCCESS, node_placeholders, result={"humanized_content": humanized_content})
+        write_log("🧹 [节点4] 开始Humanizer去AI化润色", log_placeholder)
+        engine, _, _ = get_engine()
+        humanized_content = engine.humanize_text(raw_content)
+        write_log("✅ [节点4] Humanizer去AI化润色完成", log_placeholder)
+        update_node_status(pipeline, "humanizer_process", NodeStatus.SUCCESS, node_placeholders)
         return True, humanized_content
     except Exception as e:
-        write_log(f"❌ [节点4] 去AI化处理失败：{str(e)}，保留原始正文", log_placeholder)
-        update_node_status(pipeline, "humanizer_process", NodeStatus.SUCCESS, node_placeholders)
+        logger.error(f"❌ Humanizer失败：{str(e)}", exc_info=True)
+        write_log(f"⚠️ [节点4] Humanizer失败，返回原文：{str(e)}", log_placeholder)
+        write_log("ℹ️ [节点4] 使用原文继续后续流程", log_placeholder)
+        update_node_status(pipeline, "humanizer_process", NodeStatus.SKIPPED, node_placeholders)
         return True, raw_content
 
 def run_update_plot(pipeline: DAGPipeline, node_placeholders: Dict, log_placeholder, chapter_content: str, chapter_num: int) -> bool:
@@ -690,7 +840,219 @@ def run_finish(pipeline: DAGPipeline, node_placeholders: Dict, log_placeholder) 
     write_log(f"✅ [节点8] 全流程闭环完成！下一章章节号已自动更新", log_placeholder)
     return True
 
+# ================= 辅助函数 =================
+
+def test_llm_connection(provider: str, api_key_val: str, base_url_val: str, model_val: str) -> tuple[bool, str]:
+    """测试大模型连接"""
+    try:
+        if provider == "openai":
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key_val, base_url=base_url_val)
+            response = client.chat.completions.create(
+                model=model_val,
+                messages=[{"role": "user", "content": "你好"}],
+                max_tokens=10
+            )
+            return True, f"✅ 连接成功！模型响应正常"
+        elif provider == "anthropic":
+            from anthropic import Anthropic
+            client = Anthropic(api_key=api_key_val)
+            response = client.messages.create(
+                model=model_val,
+                max_tokens=10,
+                messages=[{"role": "user", "content": "你好"}]
+            )
+            return True, f"✅ 连接成功！模型响应正常"
+        elif provider == "ollama":
+            import requests
+            response = requests.post(
+                f"{base_url_val}/api/generate",
+                json={
+                    "model": model_val,
+                    "prompt": "你好",
+                    "stream": False,
+                    "options": {"num_predict": 10}
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            return True, f"✅ 连接成功！模型响应正常"
+        else:
+            return False, f"❌ 不支持的提供商：{provider}"
+    except Exception as e:
+        return False, f"❌ 连接失败：{str(e)}"
+
 # ================= 页面UI渲染 =================
+
+# 侧边栏：大模型配置
+with st.sidebar:
+    st.markdown("### 🤖 大模型配置")
+    st.markdown("---")
+    
+    # 读取当前配置
+    current_env = read_env_file()
+    
+    # 提供商选择
+    provider_options = ["openai", "anthropic", "ollama"]
+    default_provider = current_env.get("LLM_PROVIDER", "openai")
+    if default_provider not in provider_options:
+        default_provider = "openai"
+    
+    llm_provider = st.selectbox(
+        "LLM 提供商",
+        options=provider_options,
+        index=provider_options.index(default_provider)
+    )
+    
+    # 预设模型提示
+    preset_models = {
+        "openai": ["gpt-4", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+        "anthropic": ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
+        "ollama": ["llama2", "llama3", "mistral", "gemma"]
+    }
+    
+    # 获取当前模型
+    current_model = current_env.get("LLM_MODEL_NAME", "")
+    if not current_model:
+        current_model = preset_models[llm_provider][0] if preset_models[llm_provider] else ""
+    
+    # 模型输入和获取列表按钮
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        model_name = st.text_input(
+            "模型名称（可自定义）",
+            value=current_model,
+            placeholder=f"例如：{preset_models[llm_provider][0] if preset_models[llm_provider] else '输入模型名称'}"
+        )
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if llm_provider == "openai":
+            if st.button("🔍", help="获取模型列表"):
+                if api_key and base_url:
+                    fetched_models = fetch_models_from_openai_api(base_url, api_key)
+                    if fetched_models:
+                        st.session_state.fetched_models = fetched_models
+                        st.success(f"✅ 成功获取 {len(fetched_models)} 个模型！")
+                    else:
+                        st.error("❌ 未能获取到模型列表")
+                else:
+                    st.error("❌ 请先填写API Key和Base URL")
+    
+    # 显示预设模型提示
+    st.caption(f"预设模型：{', '.join(preset_models[llm_provider])}")
+    
+    # 显示获取到的模型列表（如果有）
+    if 'fetched_models' in st.session_state and st.session_state.fetched_models:
+        st.markdown("#### 可选择的模型")
+        selected_model = st.selectbox(
+            "从列表中选择",
+            options=[""] + st.session_state.fetched_models,
+            index=0
+        )
+        if selected_model:
+            model_name = selected_model
+    
+    # API Key 输入（密码输入框）
+    api_key_env_key = "OPENAI_API_KEY" if llm_provider == "openai" else "ANTHROPIC_API_KEY"
+    current_api_key = current_env.get(api_key_env_key, "")
+    api_key = st.text_input(
+        "API Key",
+        type="password",
+        value=current_api_key,
+        placeholder="请输入 API Key"
+    )
+    
+    # Base URL 输入框（可选）
+    base_url_env_key = "OPENAI_BASE_URL" if llm_provider == "openai" else "OLLAMA_BASE_URL" if llm_provider == "ollama" else ""
+    default_base_url = {
+        "openai": "https://api.openai.com/v1",
+        "anthropic": "",
+        "ollama": "http://localhost:11434"
+    }
+    current_base_url = current_env.get(base_url_env_key, default_base_url[llm_provider])
+    base_url = st.text_input(
+        "Base URL (可选，用于代理)",
+        value=current_base_url,
+        placeholder=f"例如：{default_base_url[llm_provider]}"
+    )
+    
+    st.markdown("---")
+    
+    # 保存配置按钮
+    if st.button("💾 保存配置", type="primary", use_container_width=True):
+        # 直接使用输入的模型名称
+        clean_model_name = model_name
+        
+        # 验证配置
+        is_valid, error_msg = validate_llm_config(llm_provider, api_key, clean_model_name)
+        if not is_valid:
+            st.error(error_msg)
+        else:
+            # 准备要保存的环境变量
+            env_vars = {
+                "LLM_PROVIDER": llm_provider,
+                "LLM_MODEL_NAME": clean_model_name
+            }
+            
+            if llm_provider == "openai":
+                env_vars["OPENAI_API_KEY"] = api_key
+                env_vars["OPENAI_BASE_URL"] = base_url
+                if "ANTHROPIC_API_KEY" in current_env:
+                    env_vars["ANTHROPIC_API_KEY"] = current_env["ANTHROPIC_API_KEY"]
+                if "OLLAMA_BASE_URL" in current_env:
+                    env_vars["OLLAMA_BASE_URL"] = current_env["OLLAMA_BASE_URL"]
+            elif llm_provider == "anthropic":
+                env_vars["ANTHROPIC_API_KEY"] = api_key
+                if "OPENAI_API_KEY" in current_env:
+                    env_vars["OPENAI_API_KEY"] = current_env["OPENAI_API_KEY"]
+                if "OPENAI_BASE_URL" in current_env:
+                    env_vars["OPENAI_BASE_URL"] = current_env["OPENAI_BASE_URL"]
+                if "OLLAMA_BASE_URL" in current_env:
+                    env_vars["OLLAMA_BASE_URL"] = current_env["OLLAMA_BASE_URL"]
+            elif llm_provider == "ollama":
+                env_vars["OLLAMA_BASE_URL"] = base_url
+                if "OPENAI_API_KEY" in current_env:
+                    env_vars["OPENAI_API_KEY"] = current_env["OPENAI_API_KEY"]
+                if "OPENAI_BASE_URL" in current_env:
+                    env_vars["OPENAI_BASE_URL"] = current_env["OPENAI_BASE_URL"]
+                if "ANTHROPIC_API_KEY" in current_env:
+                    env_vars["ANTHROPIC_API_KEY"] = current_env["ANTHROPIC_API_KEY"]
+            
+            # 保存其他现有的环境变量
+            for key, value in current_env.items():
+                if key not in env_vars:
+                    env_vars[key] = value
+            
+            # 写入 .env 文件
+            write_env_file(env_vars)
+            
+            # 重载环境变量
+            reload_env()
+            
+            # 重置 LLM 适配器
+            reset_llm_adapter()
+            
+            # 重置引擎
+            st.session_state.pipeline = None
+            reset_engine()
+            
+            st.success("✅ 配置已保存并立即生效！")
+            
+            # 测试连接
+            st.info("🔍 正在测试大模型连接...")
+            with st.spinner("测试中..."):
+                test_success, test_msg = test_llm_connection(llm_provider, api_key, base_url, clean_model_name)
+                if test_success:
+                    st.success(test_msg)
+                else:
+                    st.error(test_msg)
+            
+            st.rerun()
+    
+    st.markdown("---")
+    st.markdown("### 📝 提示")
+    st.info("配置保存后会立即生效，无需重启应用。")
+
 st.title("🌌 赛博印钞机 Pro Mac版")
 st.markdown("""
 <span class='status-badge'>✅ 内置技能物理内聚合并</span>

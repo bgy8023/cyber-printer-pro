@@ -70,3 +70,6 @@ bin/claw-core.exe
 # 锁文件
 .locks/
 *.lock
+
+# 自定义模型配置
+novel_settings/custom_models.json

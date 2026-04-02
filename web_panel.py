@@ -391,8 +391,6 @@ def run_init_check(pipeline: DAGPipeline, node_placeholders: Dict, log_placehold
             raise Exception("核心环境变量缺失，请检查.env文件")
         if not GEN_SCRIPT_PATH or not os.path.exists(GEN_SCRIPT_PATH):
             raise Exception(f"生成脚本不存在：{GEN_SCRIPT_PATH}")
-        if not os.path.exists(OPENCLAW_WORKSPACE):
-            raise Exception(f"OpenClaw工作区不存在：{OPENCLAW_WORKSPACE}")
         
         write_log(f"🤖 [节点1] 正在检查目标Agent：{target_agent}", log_placeholder)
         if target_agent not in st.session_state.agents_list:

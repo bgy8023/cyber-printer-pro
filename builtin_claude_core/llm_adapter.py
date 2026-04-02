@@ -246,7 +246,7 @@ class LLMAdapter:
             return OpenAIProvider(
                 api_key=api_key,
                 base_url=kwargs.get("base_url") or os.getenv("OPENAI_BASE_URL"),
-                model=kwargs.get("model") or os.getenv("OPENAI_MODEL", "gpt-4")
+                model=kwargs.get("model") or os.getenv("LLM_MODEL_NAME") or os.getenv("OPENAI_MODEL", "gpt-4")
             )
         
         elif provider_type == "anthropic":
@@ -255,13 +255,13 @@ class LLMAdapter:
                 raise ValueError("使用 Anthropic 需要提供 api_key 或设置 ANTHROPIC_API_KEY 环境变量")
             return AnthropicProvider(
                 api_key=api_key,
-                model=kwargs.get("model") or os.getenv("ANTHROPIC_MODEL", "claude-3-sonnet-20240229")
+                model=kwargs.get("model") or os.getenv("LLM_MODEL_NAME") or os.getenv("ANTHROPIC_MODEL", "claude-3-sonnet-20240229")
             )
         
         elif provider_type == "ollama":
             return OllamaProvider(
                 base_url=kwargs.get("base_url") or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-                model=kwargs.get("model") or os.getenv("OLLAMA_MODEL", "llama2")
+                model=kwargs.get("model") or os.getenv("LLM_MODEL_NAME") or os.getenv("OLLAMA_MODEL", "llama2")
             )
         
         else:
