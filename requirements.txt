@@ -1,19 +1,17 @@
-
-streamlit&gt;=1.28.0
-pywebview&gt;=4.4.0
-python-dotenv&gt;=1.0.0
-notion-client&gt;=2.2.0
-requests&gt;=2.31.0
-pyyaml&gt;=6.0
-psutil&gt;=5.9.0
-
-# 浏览器自动化
-selenium&gt;=4.15.0
-playwright&gt;=1.40.0
-webdriver-manager&gt;=4.0.1
-
-# 新增：核心依赖
-numpy&gt;=1.24.0
-pandas&gt;=2.0.0
-httpx&gt;=0.25.0
-filelock&gt;=3.13.0
+# 通用LLM调用（行业标准，兼容所有OpenAI格式模型）
+openai>=1.0.0
+# 配置管理
+python-dotenv>=1.0.0
+# Notion对接
+notion-client>=2.0.0
+# 网络请求
+requests>=2.31.0
+# 可视化面板
+streamlit>=1.30.0
+# 文件锁（并发安全）
+filelock>=3.13.0
+# 性能监控
+pyyaml>=6.0.1
+# 语义记忆向量搜索
+annoy>=1.17.0
+numpy>=1.24.0
