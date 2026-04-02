@@ -4,6 +4,7 @@ import re
 import time
 from typing import List, Dict, Any, Optional
 from .logger import logger
+from .semantic_memory import semantic_memory
 
 
 class ClaudeQueryEngine:
@@ -38,8 +39,18 @@ class ClaudeQueryEngine:
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
                     self._parse_memory_file(file, content)
+                    
+                    # 添加到语义记忆系统
+                    metadata = {
+                        'filename': file,
+                        'type': 'markdown'
+                    }
+                    semantic_memory.add_memory(content, metadata)
             except Exception as e:
                 logger.error(f"❌ 记忆文件加载失败：{file}，错误：{str(e)}", exc_info=True)
+        
+        # 构建语义记忆索引
+        semantic_memory.build_index()
         
         logger.info(f"✅ 记忆宫殿加载完成，共加载{len(self.memory_store)}条记忆")
 
@@ -63,42 +74,53 @@ class ClaudeQueryEngine:
         
         self.memory_store[filename] = content
 
-    def retrieve_memory(self, query: str, top_k: int = 5) -&gt; str:
+    def retrieve_memory(self, query: str, top_k: int = 5) -> str:
         """
         精准检索相关记忆，避免吃书
-        基于关键词权重匹配，优先返回核心设定
+        结合语义记忆和关键词权重匹配，提高检索准确性
         """
-        if not self.memory_store:
-            return ""
-        
-        keyword_weights = {
-            "主角": 10, "人设": 10, "反派": 8, "世界观": 8,
-            "伏笔": 7, "剧情": 6, "设定": 5, "规则": 5
-        }
-
-        memory_scores: Dict[str, int] = {}
-        for key, content in self.memory_store.items():
-            if not isinstance(content, str):
-                continue
-            
-            score = 0
-            for keyword, weight in keyword_weights.items():
-                if keyword in query and keyword in content:
-                    score += weight
-            
-            if score &gt; 0:
-                memory_scores[key] = score
-        
-        sorted_memory = sorted(memory_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
-        
         relevant_memory = []
-        for key, _ in sorted_memory:
-            relevant_memory.append(f"【{key}】\n{self.memory_store[key]}")
+        
+        # 1. 使用语义记忆系统进行检索
+        semantic_results = semantic_memory.search(query, top_k=top_k)
+        
+        if semantic_results:
+            logger.info(f"🔍 语义记忆检索到 {len(semantic_results)} 条相关记忆")
+            for distance, content, metadata in semantic_results:
+                # 距离越小，相关性越高
+                if distance < 0.8:  # 设置阈值
+                    filename = metadata.get('filename', '未知文件')
+                    relevant_memory.append(f"【{filename}】\n{content}")
+        
+        # 2. 如果语义记忆检索结果不足，使用关键词权重匹配作为补充
+        if len(relevant_memory) < top_k and self.memory_store:
+            keyword_weights = {
+                "主角": 10, "人设": 10, "反派": 8, "世界观": 8,
+                "伏笔": 7, "剧情": 6, "设定": 5, "规则": 5
+            }
+
+            memory_scores: Dict[str, int] = {}
+            for key, content in self.memory_store.items():
+                if not isinstance(content, str):
+                    continue
+                
+                score = 0
+                for keyword, weight in keyword_weights.items():
+                    if keyword in query and keyword in content:
+                        score += weight
+                
+                if score > 0:
+                    memory_scores[key] = score
+            
+            sorted_memory = sorted(memory_scores.items(), key=lambda x: x[1], reverse=True)[:top_k - len(relevant_memory)]
+            
+            for key, _ in sorted_memory:
+                relevant_memory.append(f"【{key}】\n{self.memory_store[key]}")
         
         logger.info(f"🔍 检索到{len(relevant_memory)}条相关记忆")
         return "\n\n".join(relevant_memory)
 
-    def undercover_process(self, prompt: str) -&gt; str:
+    def undercover_process(self, prompt: str) -> str:
         """
         Undercover Mode底层处理
         从prompt底层改变生成逻辑，原生规避AI写作特征
@@ -121,7 +143,7 @@ class ClaudeQueryEngine:
         """
         return undercover_prompt
 
-    def multi_agent_coordinate(self, chapter_num: int, target_words: int, custom_prompt: str, relevant_memory: str) -&gt; Dict[str, Any]:
+    def multi_agent_coordinate(self, chapter_num: int, target_words: int, custom_prompt: str, relevant_memory: str) -> Dict[str, Any]:
         """
         多智能体协调调度，参考Claude源码Coordinator模式
         分工：大纲Agent→主笔Agent→审核Agent→润色Agent，流水线式创作
@@ -176,7 +198,7 @@ class ClaudeQueryEngine:
         max_loop = 5
         current_loop = 0
 
-        while real_chars &lt; int(target_words * 0.95) and current_loop &lt; max_loop:
+        while real_chars < int(target_words * 0.95) and current_loop < max_loop:
             current_loop += 1
             logger.info(f"📝 第{current_loop}次补全字数，当前：{real_chars}/{target_words}")
             
@@ -235,7 +257,7 @@ class ClaudeQueryEngine:
 
         return final_result
 
-    def _call_agent(self, agent_name: str, prompt: str) -&gt; str:
+    def _call_agent(self, agent_name: str, prompt: str) -> str:
         """调用子Agent，带超时重试机制（占位实现，等待后续与Trae对接）"""
         logger.warning(f"⚠️ {agent_name}：当前使用占位实现，请与Trae API对接")
         for i in range(self.max_retry):
@@ -252,6 +274,6 @@ class ClaudeQueryEngine:
                 time.sleep(2)
 
     @staticmethod
-    def _count_real_chars(text: str) -&gt; int:
+    def _count_real_chars(text: str) -> int:
         """精准统计汉字数量，统一全系统统计规则"""
         return len(re.findall(r'[\u4e00-\u9fa5]', text))

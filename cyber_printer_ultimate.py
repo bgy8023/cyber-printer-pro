@@ -14,7 +14,8 @@ import base64
 import requests
 from dotenv import load_dotenv
 from notion_client import Client
-from builtin_claude_core import logger, ClaudeQueryEngine, ConfigManager, MetricsCollector, lock_manager
+from builtin_claude_core import logger, ConfigManager, MetricsCollector, lock_manager
+from rust_dispatcher import get_dispatcher
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -35,7 +36,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(MEMORY_DIR, exist_ok=True)
 
 
-engine = ClaudeQueryEngine(trae_api_key=TRAE_API_KEY)
+engine = get_dispatcher(trae_api_key=TRAE_API_KEY)
 config = ConfigManager()
 metrics = MetricsCollector()
 

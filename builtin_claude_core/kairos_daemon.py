@@ -19,7 +19,7 @@ class KairosDaemon:
         self.running = True
         logger.info(f"✅ Kairos守护进程初始化完成，每日凌晨{gen_hour}点自动生成")
 
-    def get_current_chapter(self) -&gt; int:
+    def get_current_chapter(self) -> int:
         """获取当前章节号"""
         if not os.path.exists(self.chapter_file):
             with open(self.chapter_file, "w", encoding="utf-8") as f:
@@ -41,7 +41,7 @@ class KairosDaemon:
         except Exception as e:
             logger.error(f"❌ 章节号更新失败：{str(e)}", exc_info=True)
 
-    def run_generation(self, chapter_num: int) -&gt; bool:
+    def run_generation(self, chapter_num: int) -> bool:
         """执行章节生成"""
         logger.info(f"🚀 开始自动生成第{chapter_num}章")
         try:
