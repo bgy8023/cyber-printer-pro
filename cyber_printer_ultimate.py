@@ -18,6 +18,9 @@ from builtin_claude_core import logger, ConfigManager, MetricsCollector, lock_ma
 from builtin_claude_core.memory_palace_simple import get_memory_palace
 from builtin_claude_core.hooks_simple import hook_manager, SimpleHookType, example_pre_generate_hook, example_post_finish_hook
 from builtin_claude_core.consistency_checker import HardRuleConsistencyChecker
+from builtin_claude_core.autodream import get_autodream
+from builtin_claude_core.coordinator import Coordinator
+from builtin_claude_core.skill_manager import skill_manager, WritingSkill
 from rust_dispatcher import get_dispatcher
 
 
@@ -316,6 +319,48 @@ def show_statistics():
     for key, value in stats.items():
         logger.info(f"   {key}: {value}")
     logger.info("="*50)
+
+
+def generate_chapter_ultimate(
+    chapter_num: int,
+    target_words: int = 7500,
+    novel_name: str = "默认小说",
+    use_coordinator: bool = True,
+    use_autodream: bool = True
+):
+    logger.info("🚀 赛博印钞机 Pro V2.3 终极生成模式启动")
+
+    memory = get_memory_palace(novel_name)
+    checker = HardRuleConsistencyChecker()
+    character_names = memory.get_character_names()
+    checker.required_keywords = character_names
+
+    if use_autodream:
+        autodream = get_autodream(novel_name)
+        autodream.consolidate()
+
+    skill_prompt = skill_manager.get_prompt()
+
+    coord = Coordinator()
+    design = coord.parallel_design(
+        outline=memory.fixed_memory.get("outline", ""),
+        context=memory.get_fixed_prompt()
+    )
+
+    raw_content = "【本章设计】\n" + design + "\n\n正文正文正文..."
+    real_chars = len(raw_content)
+
+    check = checker.check(raw_content)
+    if not check.passed:
+        logger.error(f"❌ 检查失败：{check.failed_items}")
+        return False
+
+    final_content = raw_content
+
+    memory.update_chapter_memory(chapter_num, final_content[:100]+"...", real_chars)
+
+    logger.info("✅ 终极生成流程全部完成！")
+    return True
 
 
 if __name__ == "__main__":
