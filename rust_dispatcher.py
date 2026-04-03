@@ -310,6 +310,18 @@ class RustCoreDispatcher:
         # 直接调用 dispatch_task 方法
         return self.dispatch_task(chapter_num, target_words, custom_prompt, relevant_memory)
     
+    def humanize_text(self, text: str) -> str:
+        """
+        文本去AI化润色
+        调用 Python 引擎的 humanize_text 方法
+        """
+        # 确保 Python 引擎已初始化
+        if not hasattr(self, 'python_engine'):
+            self.python_engine = ClaudeQueryEngine(llm_provider=self.llm_provider)
+        
+        # 调用 Python 引擎的 humanize_text 方法
+        return self.python_engine.humanize_text(text)
+    
     @staticmethod
     def _count_real_chars(text: str) -> int:
         """

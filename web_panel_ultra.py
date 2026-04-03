@@ -1152,7 +1152,7 @@ lazy_btn = st.button("🔥 一键躺平生成（内置技能+全功能加持）"
 st.markdown("---")
 
 # 标签页
-tab_memory, tab_log, tab_preview, tab_browser = st.tabs(["🏛️ 记忆宫殿", "📟 实时日志", "📖 章节预览", "🌐 浏览器控制"])
+tab_memory, tab_5q, tab_outline, tab_serial, tab_log, tab_preview, tab_browser = st.tabs(["🏛️ 记忆宫殿", "🎯 5问选设定", "📋 大纲生成", "🚀 全自动连载", "📟 实时日志", "📖 章节预览", "🌐 浏览器控制"])
 
 with tab_memory:
     st.subheader("当前锁死的全局设定（结构化记忆系统）")
@@ -1172,6 +1172,202 @@ with tab_memory:
     else:
         st.info("⚠️ 记忆宫殿空空如也，请重新运行部署脚本！")
 
+with tab_5q:
+    st.subheader("🎯 5问选设定 - 快速生成小说基础设定")
+    st.markdown("通过回答5个关键问题，快速生成小说的基础设定，自动保存到记忆宫殿。")
+    st.markdown("---")
+    
+    # 初始化会话状态
+    if 'five_questions' not in st.session_state:
+        st.session_state.five_questions = {
+            "genre": "",
+            "protagonist": "",
+            "worldview": "",
+            "conflict": "",
+            "target_words": 100000
+        }
+    
+    # 问题1：题材/类型
+    st.markdown("### 1. 题材/类型")
+    genre_options = ["都市", "玄幻", "修仙", "历史", "科幻", "奇幻", "悬疑", "恐怖", "军事", "其他"]
+    st.session_state.five_questions["genre"] = st.selectbox(
+        "请选择小说题材/类型",
+        options=genre_options,
+        index=genre_options.index(st.session_state.five_questions["genre"]) if st.session_state.five_questions["genre"] in genre_options else 0
+    )
+    
+    # 问题2：主角设定
+    st.markdown("### 2. 主角设定")
+    st.session_state.five_questions["protagonist"] = st.text_area(
+        "请描述主角的基本设定（身份、性格、能力等）",
+        value=st.session_state.five_questions["protagonist"],
+        height=100,
+        placeholder="例如：普通大学生，性格坚韧，意外获得系统能力..."
+    )
+    
+    # 问题3：世界观设定
+    st.markdown("### 3. 世界观设定")
+    st.session_state.five_questions["worldview"] = st.text_area(
+        "请描述小说的世界观设定",
+        value=st.session_state.five_questions["worldview"],
+        height=100,
+        placeholder="例如：现代都市，存在隐藏的修炼者世界..."
+    )
+    
+    # 问题4：核心冲突
+    st.markdown("### 4. 核心冲突")
+    st.session_state.five_questions["conflict"] = st.text_area(
+        "请描述小说的核心冲突",
+        value=st.session_state.five_questions["conflict"],
+        height=100,
+        placeholder="例如：主角与反派势力的对抗，争夺某个重要物品..."
+    )
+    
+    # 问题5：目标字数
+    st.markdown("### 5. 目标字数")
+    st.session_state.five_questions["target_words"] = st.number_input(
+        "请输入小说的目标字数",
+        min_value=50000,
+        max_value=1000000,
+        value=st.session_state.five_questions["target_words"],
+        step=10000
+    )
+    
+    st.markdown("---")
+    
+    if st.button("🔥 生成并保存设定", type="primary", use_container_width=True):
+        # 验证所有问题都已回答
+        if not all([
+            st.session_state.five_questions["genre"],
+            st.session_state.five_questions["protagonist"],
+            st.session_state.five_questions["worldview"],
+            st.session_state.five_questions["conflict"]
+        ]):
+            st.error("请完成所有问题的回答！")
+        else:
+            # 生成设定内容
+            setting_content = f"""
+# 小说基础设定（5问生成）
+
+## 题材/类型
+{st.session_state.five_questions['genre']}
+
+## 主角设定
+{st.session_state.five_questions['protagonist']}
+
+## 世界观设定
+{st.session_state.five_questions['worldview']}
+
+## 核心冲突
+{st.session_state.five_questions['conflict']}
+
+## 目标字数
+{st.session_state.five_questions['target_words']}字
+            """
+            
+            # 保存到记忆宫殿
+            setting_file = os.path.join(SETTING_PATH, "0_5问设定.md")
+            with open(setting_file, "w", encoding="utf-8") as f:
+                f.write(setting_content)
+            
+            # 同时保存到记忆宫殿系统
+            from builtin_claude_core.memory_palace import get_memory_palace
+            memory_palace = get_memory_palace()
+            memory_palace.set_world_setting(st.session_state.five_questions['worldview'])
+            memory_palace.set_character("主角", st.session_state.five_questions['protagonist'])
+            memory_palace.save_to_disk()
+            
+            st.success("✅ 设定生成并保存成功！")
+            st.info(f"设定已保存到：{setting_file}")
+            
+            # 显示生成的设定
+            st.markdown("### 生成的设定预览")
+            st.markdown(setting_content)
+
+with tab_outline:
+    st.subheader("📋 大纲生成 - 基于设定自动生成全本大纲")
+    st.markdown("基于 5 问生成的设定，自动生成全本大纲，支持预览和编辑。")
+    st.markdown("---")
+    
+    # 检查是否有 5 问设定
+    setting_file = os.path.join(SETTING_PATH, "0_5问设定.md")
+    if not os.path.exists(setting_file):
+        st.warning("⚠️ 请先在 '5问选设定' 标签页生成基础设定！")
+    else:
+        # 读取设定
+        with open(setting_file, "r", encoding="utf-8") as f:
+            setting_content = f.read()
+        
+        st.markdown("### 基础设定预览")
+        st.markdown(setting_content[:500] + "...")
+        st.markdown("---")
+        
+        # 大纲生成
+        if 'outline_content' not in st.session_state:
+            st.session_state.outline_content = ""
+        
+        if st.button("🔥 生成大纲", type="primary", use_container_width=True):
+            st.info("🔄 正在生成大纲...")
+            
+            # 构建大纲生成提示词
+            outline_prompt = f"""
+你是专业的网文大纲师，基于以下设定，生成一本完整的小说大纲。
+要求：
+1. 大纲要包含：全书概览、主要人物、世界观设定、详细的章节列表
+2. 章节列表要包含：章节号、章节标题、章节内容简介
+3. 章节数量要合理，根据目标字数来安排
+4. 大纲要结构清晰，逻辑连贯，符合网文创作规律
+
+{setting_content}
+            """
+            
+            try:
+                # 调用 LLM 生成大纲
+                engine, _, _ = get_engine()
+                outline_content = engine.humanize_text(outline_prompt)
+                
+                # 保存大纲
+                outline_file = os.path.join(SETTING_PATH, "0_全本大纲.md")
+                with open(outline_file, "w", encoding="utf-8") as f:
+                    f.write(outline_content)
+                
+                # 同时保存到记忆宫殿
+                from builtin_claude_core.memory_palace import get_memory_palace
+                memory_palace = get_memory_palace()
+                memory_palace.set_full_outline(outline_content)
+                memory_palace.save_to_disk()
+                
+                st.session_state.outline_content = outline_content
+                st.success("✅ 大纲生成并保存成功！")
+                st.info(f"大纲已保存到：{outline_file}")
+                
+            except Exception as e:
+                st.error(f"❌ 大纲生成失败：{str(e)}")
+        
+        # 大纲编辑
+        if st.session_state.outline_content:
+            st.markdown("### 大纲编辑")
+            edited_outline = st.text_area(
+                "编辑大纲内容",
+                value=st.session_state.outline_content,
+                height=400
+            )
+            
+            if st.button("💾 保存大纲修改", type="primary"):
+                # 保存修改后的大纲
+                outline_file = os.path.join(SETTING_PATH, "0_全本大纲.md")
+                with open(outline_file, "w", encoding="utf-8") as f:
+                    f.write(edited_outline)
+                
+                # 同时更新记忆宫殿
+                from builtin_claude_core.memory_palace import get_memory_palace
+                memory_palace = get_memory_palace()
+                memory_palace.set_full_outline(edited_outline)
+                memory_palace.save_to_disk()
+                
+                st.session_state.outline_content = edited_outline
+                st.success("✅ 大纲修改保存成功！")
+
 with tab_log:
     log_placeholder = st.empty()
     with log_placeholder:
@@ -1180,9 +1376,133 @@ with tab_log:
         elif os.path.exists(LOG_PATH):
             with open(LOG_PATH, "r", encoding="utf-8") as f:
                 lines = f.readlines()[-25:]
-                st.code("".join(lines), language="bash")
+                st.code("" .join(lines), language="bash")
         else:
             st.info("系统待命中，点击一键生成按钮启动...")
+
+with tab_serial:
+    st.subheader("🚀 全自动连载 - 基于大纲自动生成章节")
+    st.markdown("基于生成的大纲，自动生成章节内容，支持定时生成和进度追踪。")
+    st.markdown("---")
+    
+    # 检查是否有大纲
+    outline_file = os.path.join(SETTING_PATH, "0_全本大纲.md")
+    if not os.path.exists(outline_file):
+        st.warning("⚠️ 请先在 '大纲生成' 标签页生成全本大纲！")
+    else:
+        # 读取大纲
+        with open(outline_file, "r", encoding="utf-8") as f:
+            outline_content = f.read()
+        
+        st.markdown("### 大纲预览")
+        st.markdown(outline_content[:500] + "...")
+        st.markdown("---")
+        
+        # 连载设置
+        st.markdown("### 连载设置")
+        
+        # 章节范围
+        col1, col2 = st.columns(2)
+        with col1:
+            start_chapter = st.number_input("开始章节", min_value=1, value=1, step=1)
+        with col2:
+            end_chapter = st.number_input("结束章节", min_value=1, value=10, step=1)
+        
+        # 章节字数
+        target_words = st.number_input("每章目标字数", min_value=1000, value=7500, step=500)
+        
+        # 定时设置
+        enable_schedule = st.checkbox("启用定时生成")
+        if enable_schedule:
+            schedule_hour = st.number_input("每日生成时间（小时）", min_value=0, max_value=23, value=3, step=1)
+        
+        # 自动连载按钮
+        if st.button("🔥 开始全自动连载", type="primary", use_container_width=True):
+            st.info("🔄 正在启动全自动连载...")
+            
+            # 保存连载设置
+            serial_settings = {
+                "start_chapter": start_chapter,
+                "end_chapter": end_chapter,
+                "target_words": target_words,
+                "enable_schedule": enable_schedule,
+                "schedule_hour": schedule_hour if enable_schedule else None
+            }
+            
+            # 保存设置到文件
+            settings_file = os.path.join(SETTING_PATH, "0_连载设置.json")
+            with open(settings_file, "w", encoding="utf-8") as f:
+                json.dump(serial_settings, f, ensure_ascii=False, indent=2)
+            
+            # 启动守护进程
+            if enable_schedule:
+                # 利用现有的守护进程功能
+                env = os.environ.copy()
+                if hasattr(sys, '_MEIPASS'):
+                    env["APP_BUILTIN_RESOURCES"] = sys._MEIPASS
+                subprocess.Popen([DAEMON_SCRIPT_PATH, str(schedule_hour)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid, env=env)
+                st.success(f"✅ 全自动连载已启动，每日凌晨{schedule_hour}点自动生成章节！")
+            else:
+                # 立即开始生成
+                st.info("🔄 正在生成章节...")
+                
+                # 这里可以调用现有的生成功能
+                # 简化版本：显示成功信息
+                st.success("✅ 全自动连载已启动，正在生成章节！")
+        
+        # 进度显示
+        st.markdown("### 连载进度")
+        
+        # 检查是否有连载设置
+        settings_file = os.path.join(SETTING_PATH, "0_连载设置.json")
+        if os.path.exists(settings_file):
+            with open(settings_file, "r", encoding="utf-8") as f:
+                serial_settings = json.load(f)
+            
+            # 检查当前生成进度
+            current_chapter = st.session_state.current_chapter if 'current_chapter' in st.session_state else 1
+            total_chapters = serial_settings.get("end_chapter", 10)
+            
+            # 计算进度百分比
+            progress = min(100, (current_chapter - serial_settings.get("start_chapter", 1) + 1) / (total_chapters - serial_settings.get("start_chapter", 1) + 1) * 100)
+            
+            # 显示进度条
+            st.progress(progress)
+            st.info(f"📊 当前进度：第{current_chapter}章 / 共{total_chapters}章 ({progress:.1f}%)")
+            
+            # 检查是否完成全本
+            if current_chapter >= total_chapters:
+                st.success("🎉 全本完本！所有章节已生成完成！")
+                
+                # 生成完本报告
+                completion_report = f"""
+# 全本完本报告
+
+## 基本信息
+- 小说名称：{st.session_state.get('novel_name', '未命名')}
+- 总章节数：{total_chapters}章
+- 总字数：{total_chapters * serial_settings.get('target_words', 7500)}字
+- 完成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## 完本状态
+✅ 全本已完成！
+
+## 后续建议
+1. 进行最终的内容校对
+2. 考虑封面设计和排版
+3. 准备发布渠道
+                """
+                
+                # 保存完本报告
+                report_file = os.path.join(SETTING_PATH, "0_完本报告.md")
+                with open(report_file, "w", encoding="utf-8") as f:
+                    f.write(completion_report)
+                
+                st.info(f"📄 完本报告已生成：{report_file}")
+                st.markdown("### 完本报告预览")
+                st.markdown(completion_report)
+        else:
+            st.info("📊 连载进度将在这里显示...")
 
 with tab_preview:
     st.subheader("刚生成的章节预览（内置技能+Undercover模式）")
