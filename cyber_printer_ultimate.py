@@ -15,6 +15,9 @@ import requests
 from dotenv import load_dotenv
 from notion_client import Client
 from builtin_claude_core import logger, ConfigManager, MetricsCollector, lock_manager
+from builtin_claude_core.memory_palace_simple import get_memory_palace
+from builtin_claude_core.hooks_simple import hook_manager, SimpleHookType, example_pre_generate_hook, example_post_finish_hook
+from builtin_claude_core.consistency_checker import HardRuleConsistencyChecker
 from rust_dispatcher import get_dispatcher
 
 
@@ -153,11 +156,13 @@ def generate_chapter_full(
     chapter_num: int, 
     target_words: int, 
     custom_prompt: str = "", 
-    novel_name: str = "", 
+    novel_name: str = "默认小说", 
     chapter_outline: str = "", 
-    chapter_name: str = ""
+    chapter_name: str = "",
+    enable_memory: bool = True,
+    enable_hooks: bool = True
 ) -> bool:
-    """8节点DAG全流程生成 - 二阶段升级大纲驱动版"""
+    """8节点DAG全流程生成 - 二阶段升级大纲驱动版（新增记忆系统和Hooks系统）"""
     # 开始性能监控
     metrics.start_generation(chapter_num, target_words)
     
@@ -166,6 +171,26 @@ def generate_chapter_full(
     logger.info("="*50)
 
     try:
+        # ========== 新增：初始化记忆宫殿 ==========
+        memory_palace = None
+        consistency_checker = None
+        if enable_memory:
+            memory_palace = get_memory_palace(novel_name)
+            consistency_checker = HardRuleConsistencyChecker()
+            character_names = memory_palace.get_character_names()
+            consistency_checker.required_keywords = character_names
+            logger.info("✅ 记忆系统已激活，核心人物：{character_names}")
+
+        # ========== 新增：触发PRE_GENERATE钩子 ==========
+        context = {
+            "chapter_num": chapter_num,
+            "target_words": target_words,
+            "custom_prompt": custom_prompt,
+            "novel_name": novel_name
+        }
+        if enable_hooks:
+            context = hook_manager.trigger(SimpleHookType.PRE_GENERATE, context)
+
         # ========== 节点1：初始化校验 ==========
         logger.info("🔍 [节点1/8] 开始初始化校验")
         if not os.getenv("LLM_API_KEY"):
@@ -180,7 +205,14 @@ def generate_chapter_full(
             engine.bind_novel(novel_name)
         else:
             engine.load_memory(MEMORY_DIR)
+        
+        # 新增：合并固定记忆到检索记忆
         relevant_memory = engine.retrieve_memory(custom_prompt)
+        if enable_memory and memory_palace:
+            fixed_prompt = memory_palace.get_fixed_prompt()
+            previous_summary = memory_palace.get_previous_summary()
+            relevant_memory = f"{fixed_prompt}\n\n{previous_summary}\n\n{relevant_memory}"
+        
         logger.info("✅ [节点2/8] 引擎与记忆初始化完成")
 
         # ========== 节点3：多智能体大纲驱动生成 ==========
@@ -206,9 +238,25 @@ def generate_chapter_full(
         metrics.end_agent("multi_agent")
         logger.info(f"✅ [节点3/8] 创作完成，最终字数：{real_chars}")
 
+        # ========== 新增：硬约束检查 ==========
+        if enable_memory and consistency_checker:
+            logger.info("🔍 执行硬约束一致性检查...")
+            check_result = consistency_checker.check(final_content)
+            if not check_result.passed:
+                logger.error(f"❌ 硬约束检查失败：{check_result.failed_items}")
+                metrics.end_generation(0, False, str(check_result.failed_items))
+                return False
+            logger.info("✅ 硬约束一致性检查通过")
+
         # ========== 节点4：剧情记忆更新 ==========
         # 已在引擎内自动完成，无需额外操作
         logger.info("✅ [节点4/8] 剧情记忆自动更新完成")
+        
+        # ========== 新增：更新动态记忆 ==========
+        if enable_memory and memory_palace:
+            logger.info("📝 更新动态记忆...")
+            chapter_summary = final_content[:100] + "..." if len(final_content) > 100 else final_content
+            memory_palace.update_chapter_memory(chapter_num, chapter_summary, real_chars)
 
         # ========== 节点5：本地文件保存 ==========
         logger.info("💾 [节点5/8] 开始保存本地文件")
@@ -232,6 +280,12 @@ def generate_chapter_full(
             logger.warning("⚠️ [节点7/8] Notion写入失败，流程继续")
         else:
             logger.info("✅ [节点7/8] Notion写入对账完成")
+
+        # ========== 新增：触发POST_FINISH钩子 ==========
+        context["final_content"] = final_content
+        context["word_count"] = real_chars
+        if enable_hooks:
+            context = hook_manager.trigger(SimpleHookType.POST_FINISH, context)
 
         # ========== 节点8：全流程闭环 ==========
         logger.info("🎉 [节点8/8] 全流程闭环完成")
