@@ -149,8 +149,15 @@ def notion_write(chapter_num: int, content: str, github_url: str, md5: str, real
         return False
 
 
-def generate_chapter_full(chapter_num: int, target_words: int, custom_prompt: str = "") -> bool:
-    """8节点DAG全流程生成，集成性能监控"""
+def generate_chapter_full(
+    chapter_num: int, 
+    target_words: int, 
+    custom_prompt: str = "", 
+    novel_name: str = "", 
+    chapter_outline: str = "", 
+    chapter_name: str = ""
+) -> bool:
+    """8节点DAG全流程生成 - 二阶段升级大纲驱动版"""
     # 开始性能监控
     metrics.start_generation(chapter_num, target_words)
     
@@ -159,25 +166,39 @@ def generate_chapter_full(chapter_num: int, target_words: int, custom_prompt: st
     logger.info("="*50)
 
     try:
+        # ========== 节点1：初始化校验 ==========
         logger.info("🔍 [节点1/8] 开始初始化校验")
+        if not os.getenv("LLM_API_KEY"):
+            logger.error("❌ LLM_API_KEY未配置，终止生成")
+            metrics.end_generation(0, False, "LLM_API_KEY未配置")
+            return False
         logger.info("✅ [节点1/8] 初始化校验通过")
 
-        logger.info("🏛️ [节点2/8] 开始加载结构化记忆")
-        engine.load_memory(MEMORY_DIR)
+        # ========== 节点2：初始化引擎，绑定记忆宫殿 ==========
+        logger.info("🏛️ [节点2/8] 初始化核心引擎与记忆宫殿")
+        if novel_name:
+            engine.bind_novel(novel_name)
+        else:
+            engine.load_memory(MEMORY_DIR)
         relevant_memory = engine.retrieve_memory(custom_prompt)
-        logger.info("✅ [节点2/8] 结构化记忆加载完成")
+        logger.info("✅ [节点2/8] 引擎与记忆初始化完成")
 
-        logger.info("🤖 [节点3/8] 开始多智能体创作")
+        # ========== 节点3：多智能体大纲驱动生成 ==========
+        logger.info("🤖 [节点3/8] 开始多智能体大纲驱动创作")
         metrics.start_agent("multi_agent")
         try:
             agent_result = engine.multi_agent_coordinate(
                 chapter_num=chapter_num,
                 target_words=target_words,
                 custom_prompt=custom_prompt,
-                relevant_memory=relevant_memory
+                relevant_memory=relevant_memory,
+                chapter_outline=chapter_outline,
+                chapter_name=chapter_name
             )
             final_content = agent_result["content"]
             real_chars = agent_result["real_chars"]
+            if not final_content:
+                raise Exception("生成内容为空")
         except Exception as e:
             logger.error(f"❌ [节点3/8] 创作失败：{str(e)}", exc_info=True)
             metrics.end_generation(0, False, str(e))
@@ -185,16 +206,18 @@ def generate_chapter_full(chapter_num: int, target_words: int, custom_prompt: st
         metrics.end_agent("multi_agent")
         logger.info(f"✅ [节点3/8] 创作完成，最终字数：{real_chars}")
 
-        logger.info("🧠 [节点4/8] 开始更新剧情记忆")
-        update_plot_record(final_content, chapter_num)
-        logger.info("✅ [节点4/8] 剧情记忆更新完成")
+        # ========== 节点4：剧情记忆更新 ==========
+        # 已在引擎内自动完成，无需额外操作
+        logger.info("✅ [节点4/8] 剧情记忆自动更新完成")
 
+        # ========== 节点5：本地文件保存 ==========
         logger.info("💾 [节点5/8] 开始保存本地文件")
-        output_file = os.path.join(OUTPUT_DIR, f"第{chapter_num}章_{real_chars}字.md")
+        output_file = os.path.join(OUTPUT_DIR, f"第{chapter_num}章_{real_chars}字_{time.strftime('%Y%m%d%H%M')}.md")
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(final_content)
         logger.info(f"✅ [节点5/8] 本地文件保存完成：{output_file}")
 
+        # ========== 节点6：GitHub母本归档 ==========
         logger.info("📦 [节点6/8] 开始GitHub母本归档")
         archive_success, github_url, md5 = github_archive(chapter_num, final_content)
         if not archive_success:
@@ -202,6 +225,7 @@ def generate_chapter_full(chapter_num: int, target_words: int, custom_prompt: st
         else:
             logger.info("✅ [节点6/8] GitHub母本归档完成")
 
+        # ========== 节点7：Notion写入对账 ==========
         logger.info("📤 [节点7/8] 开始Notion写入对账")
         notion_success = notion_write(chapter_num, final_content, github_url, md5, real_chars)
         if not notion_success:
@@ -209,6 +233,7 @@ def generate_chapter_full(chapter_num: int, target_words: int, custom_prompt: st
         else:
             logger.info("✅ [节点7/8] Notion写入对账完成")
 
+        # ========== 节点8：全流程闭环 ==========
         logger.info("🎉 [节点8/8] 全流程闭环完成")
         logger.info("="*50)
         logger.info(f"✅ 第{chapter_num}章生成完成！")

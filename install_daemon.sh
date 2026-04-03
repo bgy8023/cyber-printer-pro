@@ -1,74 +1,68 @@
+#!/bin/zsh
+# 赛博印钞机 Pro 全本守护进程管理脚本
+# 支持单章定时生成和全本自动完本模式
 
-#!/bin/bash
+APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$APP_DIR" || exit 1
 
-# 赛博印钞机 Pro - launchd 守护进程安装脚本
+PYTHON_PATH="$APP_DIR/venv/bin/python3"
+DAEMON_SCRIPT="$APP_DIR/builtin_claude_core/kairos_daemon.py"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLIST_FILE="${SCRIPT_DIR}/com.cyberprinter.daemon.plist"
-LAUNCHAGENTS_DIR="$HOME/Library/LaunchAgents"
+# 检查虚拟环境
+if [ ! -f "$PYTHON_PATH" ]; then
+    echo "❌ 虚拟环境不存在，请先运行 ./start_ultimate.command 初始化环境"
+    exit 1
+fi
 
-# 确保日志目录存在
-mkdir -p "${SCRIPT_DIR}/logs"
+# 检查参数
+COMMAND=$1
+NOVEL_NAME=$2
 
-echo "🚀 赛博印钞机 Pro - launchd 守护进程管理"
-echo "📂 脚本目录：${SCRIPT_DIR}"
-echo "="*50
-
-case "$1" in
+case $COMMAND in
     install)
-        echo "🔧 正在安装守护进程..."
-        
-        # 复制 plist 文件到 LaunchAgents
-        cp "${PLIST_FILE}" "${LAUNCHAGENTS_DIR}/"
-        
-        # 加载服务
-        launchctl load "${LAUNCHAGENTS_DIR}/com.cyberprinter.daemon.plist"
-        
-        # 验证服务状态
-        if launchctl list | grep -q com.cyberprinter.daemon; then
-            echo "✅ 守护进程安装成功！"
-            echo "📅 已设置每天凌晨 3:00 自动生成"
-            echo "🔍 日志文件：${SCRIPT_DIR}/logs/daemon.out"
-        else
-            echo "❌ 守护进程安装失败！"
-            echo "请检查权限并重新尝试"
+        if [ -z "$NOVEL_NAME" ]; then
+            echo "❌ 请指定小说名称，用法：./install_daemon.sh install <小说名称>"
+            echo "示例：./install_daemon.sh install 我的第一本小说"
+            exit 1
         fi
+        echo "🚀 安装全本自动完本守护进程，小说：$NOVEL_NAME"
+        $PYTHON_PATH $DAEMON_SCRIPT --novel-name "$NOVEL_NAME" --install
         ;;
-        
     uninstall)
-        echo "🔧 正在卸载守护进程..."
-        
-        # 停止并卸载服务
-        launchctl unload "${LAUNCHAGENTS_DIR}/com.cyberprinter.daemon.plist" 2>/dev/null
-        rm -f "${LAUNCHAGENTS_DIR}/com.cyberprinter.daemon.plist"
-        
-        # 验证服务状态
-        if ! launchctl list | grep -q com.cyberprinter.daemon; then
-            echo "✅ 守护进程卸载成功！"
-        else
-            echo "❌ 守护进程卸载失败！"
-            echo "请检查权限并重新尝试"
+        if [ -z "$NOVEL_NAME" ]; then
+            echo "❌ 请指定小说名称，用法：./install_daemon.sh uninstall <小说名称>"
+            exit 1
         fi
+        echo "🛑 卸载全本守护进程，小说：$NOVEL_NAME"
+        $PYTHON_PATH $DAEMON_SCRIPT --novel-name "$NOVEL_NAME" --uninstall
         ;;
-        
     status)
-        echo "🔍 正在检查守护进程状态..."
-        
-        if launchctl list | grep -q com.cyberprinter.daemon; then
-            echo "✅ 守护进程已安装并运行"
-            echo "📅 每天凌晨 3:00 自动生成"
-        else
-            echo "❌ 守护进程未安装"
-            echo "使用 ./install_daemon.sh install 安装"
+        if [ -z "$NOVEL_NAME" ]; then
+            echo "❌ 请指定小说名称，用法：./install_daemon.sh status <小说名称>"
+            exit 1
         fi
+        echo "📊 查看守护进程状态，小说：$NOVEL_NAME"
+        $PYTHON_PATH $DAEMON_SCRIPT --novel-name "$NOVEL_NAME" --status
         ;;
-        
+    run-once)
+        if [ -z "$NOVEL_NAME" ]; then
+            echo "❌ 请指定小说名称，用法：./install_daemon.sh run-once <小说名称>"
+            exit 1
+        fi
+        echo "🚀 手动执行单次生成任务，小说：$NOVEL_NAME"
+        $PYTHON_PATH $DAEMON_SCRIPT --novel-name "$NOVEL_NAME" --run-once
+        ;;
     *)
-        echo "📚 使用帮助："
-        echo "  ./install_daemon.sh install   - 安装守护进程"
-        echo "  ./install_daemon.sh uninstall - 卸载守护进程"
-        echo "  ./install_daemon.sh status    - 检查守护进程状态"
+        echo "赛博印钞机 Pro 全本守护进程管理脚本"
+        echo ""
+        echo "用法："
+        echo "  ./install_daemon.sh install <小说名称>   安装全本守护进程"
+        echo "  ./install_daemon.sh uninstall <小说名称> 卸载全本守护进程"
+        echo "  ./install_daemon.sh status <小说名称>    查看守护进程状态"
+        echo "  ./install_daemon.sh run-once <小说名称>  手动执行单次生成"
+        echo ""
+        echo "示例："
+        echo "  ./install_daemon.sh install 废土修仙传"
+        echo "  ./install_daemon.sh status 废土修仙传"
         ;;
 esac
-
-echo "="*50
