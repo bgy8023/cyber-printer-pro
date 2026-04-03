@@ -369,169 +369,59 @@ class ClaudeQueryEngine:
                 logger.info(f"⏳ 等待2秒后重试...")
                 time.sleep(2)
 
-    def humanize_text(self, text: str) -> str:
+    def humanize_text(
+        self,
+        raw_text: str,
+        strictness: str = "medium"
+    ) -> str:
         """
-        超强 Humanizer 去AI化润色
-        基于维基百科 "Signs of AI writing" 指南和行业最佳实践
-        将 AI 生成的文本转化为自然的人类写作风格
+        【单一职责】去AI化润色方法
+        只负责润色已生成的文本，不理解任何创作逻辑、大纲、人设
+        输入：仅待润色的 raw 文本
+        输出：润色后的 human-like 文本
         """
-        logger.info("🧹 超强 Humanizer：开始去AI化润色")
-        
-        humanize_prompt = self.undercover_process(f"""【角色定义】
-你是一位拥有15年经验的资深网文编辑，同时也是网文心理学专家。你深谙中文网文的读者心理、节奏把控和写作技巧。
+        if not raw_text or not raw_text.strip():
+            return raw_text
 
-【核心任务】
-对下面的小说正文进行深度去AI化润色，让它看起来、读起来都像是一位有经验的真人作者写的。
+        temperature_map = {"low": 0.3, "medium": 0.5, "high": 0.7}
+        temp = temperature_map.get(strictness, 0.5)
 
-【维基百科 AI 写作特征去除清单】
+        humanize_prompt = f"""
+        你是专业的网文文本润色师，**只负责润色下面的文本**，不要改变任何剧情、人设、核心信息。
 
-### 第一阶段：内容模式修复
-1. **去除过度强调重要性**：
-   - 去掉"标志着/代表着/见证着/是转折点/重要时刻/关键作用"等
-   - 去掉"反映了更广泛的趋势/象征着持久的贡献/为...奠定基础"
-   - 改为直接叙述事实
+        【润色规则】
+        1. 去除AI写作痕迹：避免规则三等结构、平行句式、AI高频词汇
+        2. 优化句子节奏：混合长短句，避免过长或过短的句子
+        3. 增强口语化：让对话更自然，让叙述更像真人在讲故事
+        4. 保留所有核心信息：剧情、人设、字数、细节都不能变
+        5. 只输出润色后的完整文本，不要任何解释、说明、备注
 
-2. **去除过度强调知名度**：
-   - 去掉"被多家媒体报道/独立报道/社会广泛关注"
-   - 去掉"拥有大量粉丝/活跃的社交媒体"
-   - 改为具体的一个引用或场景
+        【待润色的文本】
+        {raw_text}
+        """
 
-3. **去除肤浅的 -ing 分析**：
-   - 去掉"强调着/确保着/反映着/象征着..."
-   - 改为直接的陈述句
-
-4. **去除模糊的归属**：
-   - 去掉"有人说/人们认为/众所周知/据说..."
-   - 要么具体到人，要么直接陈述
-
-5. **去除破折号滥用**：
-   - AI 喜欢用 — 来连接，改成逗号、句号或重新组织
-
-6. **去除三段式套路**：
-   - AI 喜欢"首先/其次/最后""一方面/另一方面"
-   - 改成自然的叙述流
-
-### 第二阶段：语言和语法修复
-7. **替换AI高频词汇**：
-   - 去掉：此外、与之相一致、至关重要、深入探讨、因此、从而、进而、
-     鉴于、基于、鉴于此、综上所述、总而言之、据此
-   - 换成自然的中文连接：而且、不过、其实、话说回来、当然、
-     你还别说、有意思的是
-
-8. **去除否定平行结构**：
-   - 去掉"不是...而是...""与其...不如..."
-   - 改成更自然的表达
-
-9. **去除过度的连接短语**：
-   - 去掉：此外、再者、更进一步、更重要的是
-   - 让段落自然流动
-
-### 第三阶段：段落和结构修复
-10. **混合句子长度**：
-    - 不要所有句子都是差不多长
-    - 短句：有力、冲击
-    - 长句：细腻、铺垫
-    - 交替使用
-
-11. **段落不要太规整**：
-    - AI 喜欢每个段落长度差不多
-    - 有的段落一句话，有的段落很详细
-    - 制造节奏变化
-
-12. **加入一点"凌乱"**：
-    - 完美的结构反而像AI
-    - 可以有一个小的题外话、回忆片段
-    - 可以有一个未完成的想法、伏笔
-
-### 第四阶段：人格和灵魂注入（最重要！）
-13. **加入观点和情绪**：
-    - 不要中立的报道
-    - "我觉得这件事有点奇怪" 比 "这件事很奇怪" 更像人
-    - 角色可以有犹豫、矛盾、小偏见
-
-14. **承认复杂性**：
-    - 人类有混合情绪
-    - "这很爽，但也有点不安" 比 "这很爽" 更真实
-
-15. **用第一人称视角（如果合适）**：
-    - 主角的内心戏用"我"
-    - "我心里咯噔一下" 比 "他心里咯噔一下" 更有代入感
-
-16. **让一些"不完美"存在**：
-    - 可以有口语化表达
-    - 可以有重复（但不要太多）
-    - 可以有逻辑上的"毛边"
-
-17. **加入感官细节**：
-    - 不仅写视觉，还要写听觉、嗅觉、触觉、味觉
-    - "血腥味涌上来" 比 "他闻到血腥味" 更生动
-
-### 第五阶段：中文网文专属优化
-18. **对话优化**：
-    - 不要每个人说话都像播音员
-    - 有的人口头禅多，有的人话少
-    - 可以有打断、抢话、结巴
-    - 可以有没说完的话
-
-19. **节奏把控**：
-    - 战斗/紧张场景：短句多，段落短
-    - 抒情/铺垫场景：长句多，段落长
-    - 一张一弛
-
-20. **加入网文元素**：
-    - 可以有一句吐槽（如果符合人设）
-    - 可以有一个"伏笔感"的句子
-    - 可以有角色的内心吐槽
-
-【硬性规则】
-- ✅ 严格保留：原剧情、人设、爽点、关键信息
-- ✅ 尽量保持：总字数（±10%）
-- ❌ 不要输出：任何解释、说明、备注
-- ❌ 不要改变：故事走向、角色性格
-- ✅ 只输出：润色后的完整正文
-
-【小说正文】
-{text}
-
-【输出要求】
-直接开始输出润色后的正文，不要任何开场白。""")
-        
         try:
-            humanized_content = self._call_agent("超强润色Agent", humanize_prompt)
-            logger.info("✅ 超强 Humanizer：去AI化润色完成")
+            result = self.llm_adapter.generate(
+                prompt=humanize_prompt,
+                temperature=temp,
+                max_tokens=4000,
+                timeout=self.timeout,
+                max_retries=1
+            )
+            if not result:
+                raise Exception("生成内容为空")
+            result = result.strip()
             
-            # 二次反AI检查（可选但推荐）
-            final_check_prompt = self.undercover_process(f"""【反AI最终检查】
-读下面这段文字，简要回答：
-1. 这段话里还有哪些明显的AI痕迹？（列出1-3点）
-2. 只列问题，不要修改
-
-【待检查文本】
-{humanized_content}""")
+            original_len = len(raw_text)
+            result_len = len(result)
+            if result_len < original_len * 0.8 or result_len > original_len * 1.2:
+                return raw_text
             
-            logger.info("🔍 进行最终反AI检查...")
-            ai_check_result = self._call_agent("反AI检查员", final_check_prompt)
-            logger.info(f"📋 反AI检查结果：{ai_check_result[:200]}")
-            
-            # 如果检查出问题，再润色一次（但不强制，避免死循环）
-            if "AI痕迹" in ai_check_result or "痕迹" in ai_check_result:
-                logger.info("🔄 发现AI痕迹，进行最终微调...")
-                final_polish_prompt = self.undercover_process(f"""【最终微调】
-刚才的润色还有这些AI痕迹，再微调一下，不要改动剧情：
-{ai_check_result}
-
-【原文】
-{humanized_content}
-
-只输出修改后的正文。""")
-                humanized_content = self._call_agent("微调Agent", final_polish_prompt)
-                logger.info("✅ 最终微调完成")
-            
-            return humanized_content
+            return result
         except Exception as e:
-            logger.error(f"❌ 超强 Humanizer 润色失败：{str(e)}", exc_info=True)
+            logger.error(f"❌ Humanizer 润色失败：{str(e)}", exc_info=True)
             logger.warning("⚠️ Humanizer 失败，返回原文")
-            return text
+            return raw_text
 
     @staticmethod
     def _count_real_chars(text: str) -> int:
