@@ -246,8 +246,13 @@ class MemoryPalace:
         
         # 提取伏笔
         foreshadowing_list = re.findall(r"伏笔[:：]\s*([^\n]+)", content)
+        # 尝试从文件名推断章节号
+        chapter_num = 0
+        chapter_match = re.search(r"第(\d+)章", filename)
+        if chapter_match:
+            chapter_num = int(chapter_match.group(1))
         for f in foreshadowing_list:
-            self.add_foreshadowing(f, 0)
+            self.add_foreshadowing(f, chapter_num)
         
         # 保存原始内容作为通用记忆
         if "人物" in filename or "人设" in filename:
@@ -284,34 +289,89 @@ class MemoryPalace:
         if not self.memory_dir:
             return
         
+        # 保存原始状态，用于回退
+        original_fixed_memory = self.fixed_memory.copy()
+        original_dynamic_memory = self.dynamic_memory.copy()
+        
         # 加载固定记忆
         fixed_path = os.path.join(self.memory_dir, "fixed_memory.json")
         if os.path.exists(fixed_path):
             try:
                 with open(fixed_path, "r", encoding="utf-8") as f:
-                    self.fixed_memory = json.load(f)
-                logger.info("✅ 固定记忆已加载")
+                    loaded_memory = json.load(f)
+                # 验证加载的数据结构
+                if isinstance(loaded_memory, dict) and all(key in loaded_memory for key in ["characters", "world_setting", "full_outline", "chapter_outlines"]):
+                    self.fixed_memory = loaded_memory
+                    logger.info("✅ 固定记忆已加载")
+                else:
+                    logger.error("❌ 固定记忆数据结构错误，使用默认值")
+                    # 回退到原始状态
+                    self.fixed_memory = original_fixed_memory
             except Exception as e:
                 logger.error(f"❌ 加载固定记忆失败：{str(e)}")
+                # 回退到原始状态
+                self.fixed_memory = original_fixed_memory
         
         # 加载动态记忆
         dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
         if os.path.exists(dynamic_path):
             try:
                 with open(dynamic_path, "r", encoding="utf-8") as f:
-                    self.dynamic_memory = json.load(f)
-                logger.info("✅ 动态记忆已加载")
+                    loaded_memory = json.load(f)
+                # 验证加载的数据结构
+                if isinstance(loaded_memory, dict) and all(key in loaded_memory for key in ["chapters", "foreshadowing", "plot_nodes", "current_chapter"]):
+                    self.dynamic_memory = loaded_memory
+                    logger.info("✅ 动态记忆已加载")
+                else:
+                    logger.error("❌ 动态记忆数据结构错误，使用默认值")
+                    # 回退到原始状态
+                    self.dynamic_memory = original_dynamic_memory
             except Exception as e:
                 logger.error(f"❌ 加载动态记忆失败：{str(e)}")
+                # 回退到原始状态
+                self.dynamic_memory = original_dynamic_memory
     
     def _auto_summarize(self, content: str, max_length: int = 500) -> str:
-        """自动生成章节摘要（简单版本）"""
-        # 简单版本：取前几段
+        """自动生成章节摘要（改进版本）"""
+        # 分割段落
         paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
-        summary = "\n".join(paragraphs[:3])
+        
+        if not paragraphs:
+            return ""
+        
+        # 优先选择段落长度适中的内容
+        # 通常第一章或重要段落会包含关键信息
+        candidate_paragraphs = []
+        
+        # 先选择第一段（通常是章节开头）
+        if paragraphs:
+            candidate_paragraphs.append(paragraphs[0])
+        
+        # 再选择一些长度适中的段落
+        for para in paragraphs[1:]:
+            if 50 <= len(para) <= 300:  # 选择长度适中的段落
+                candidate_paragraphs.append(para)
+            if len(candidate_paragraphs) >= 3:
+                break
+        
+        # 如果不够3段，再补一些
+        if len(candidate_paragraphs) < 3 and len(paragraphs) > 3:
+            for para in paragraphs[len(candidate_paragraphs):]:
+                candidate_paragraphs.append(para)
+                if len(candidate_paragraphs) >= 3:
+                    break
+        
+        summary = "\n".join(candidate_paragraphs)
         
         if len(summary) > max_length:
-            summary = summary[:max_length] + "..."
+            # 更智能的截断，避免在句子中间截断
+            summary = summary[:max_length]
+            # 找到最后一个句号、感叹号或问号
+            last_punctuation = max(summary.rfind('。'), summary.rfind('！'), summary.rfind('？'), summary.rfind('.'), summary.rfind('!'), summary.rfind('?'))
+            if last_punctuation > max_length * 0.8:
+                summary = summary[:last_punctuation + 1]
+            else:
+                summary = summary + "..."
         
         return summary
 
@@ -325,4 +385,8 @@ def get_memory_palace(memory_dir: Optional[str] = None) -> MemoryPalace:
     global _memory_palace
     if _memory_palace is None:
         _memory_palace = MemoryPalace(memory_dir)
+    elif memory_dir is not None and _memory_palace.memory_dir != memory_dir:
+        # 如果提供了新的 memory_dir 且与当前不同，更新单例
+        _memory_palace.memory_dir = memory_dir
+        _memory_palace._init_memory_dir(memory_dir)
     return _memory_palace

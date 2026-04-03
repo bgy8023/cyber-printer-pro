@@ -219,11 +219,13 @@ def reload_env():
 NOTION_TOKEN, NOTION_DATABASE_ID, GITHUB_TOKEN, GITHUB_REPO = reload_env()
 LOG_PATH = os.getenv("SYSTEM_LOG_PATH", "system.log")
 SETTING_PATH = get_resource_path("novel_settings")
-GEN_SCRIPT_PATH = get_resource_path("run_openclaw.sh")
-OPENCLAW_WORKSPACE = os.path.expanduser("~/.openclaw/workspace")
-OPENCLAW_CONFIG_PATH = os.path.expanduser("~/.openclaw/config")
+GEN_SCRIPT_PATH = get_resource_path("run_claude_core.sh")
+OUTPUT_DIR = get_resource_path("output")
 DAEMON_SCRIPT_PATH = get_resource_path("claw_kairos_daemon.sh")
 CHAPTER_NUM_FILE = os.path.expanduser("~/OpenClaw_Arch/current_chapter.txt")
+
+# 确保输出目录存在
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # 自定义模型相关函数
 def get_custom_models_path():
@@ -283,42 +285,12 @@ def get_combined_models(provider: str) -> List[str]:
     return combined
 
 def get_clawpanel_agents():
-    """自动检测clawpanel里的所有Agent"""
+    """获取可用的智能体列表"""
     try:
         agents = ["main", "main-2"]
-        if os.path.exists(OPENCLAW_CONFIG_PATH):
-            config_files = glob.glob(os.path.join(OPENCLAW_CONFIG_PATH, "*.json"))
-            config_files += glob.glob(os.path.join(OPENCLAW_CONFIG_PATH, "*.yaml"))
-            config_files += glob.glob(os.path.join(OPENCLAW_CONFIG_PATH, "*.yml"))
-            agent_dirs = glob.glob(os.path.join(OPENCLAW_WORKSPACE, "agents", "*"))
-            for agent_dir in agent_dirs:
-                if os.path.isdir(agent_dir):
-                    agent_name = os.path.basename(agent_dir)
-                    if agent_name not in agents:
-                        agents.append(agent_name)
-        try:
-            result = subprocess.run(
-                [os.path.join(OPENCLAW_WORKSPACE, "claw"), "agent", "list"],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=5
-            )
-            if result.returncode == 0:
-                lines = result.stdout.split("\n")
-                for line in lines:
-                    line = line.strip()
-                    if line and not line.startswith("#") and not line.startswith("-"):
-                        parts = re.split(r"\s+", line)
-                        if parts:
-                            agent_name = parts[0]
-                            if agent_name not in agents and agent_name.lower() not in ["name", "agent", "id"]:
-                                agents.append(agent_name)
-        except:
-            pass
         return sorted(list(set(agents)))
-    except:
-        return ["default"]
+    except Exception:
+        return ["main", "main-2"]
 
 def get_agent_skills(agent_name: str) -> List[str]:
     """从内置技能目录读取技能列表"""
@@ -420,7 +392,9 @@ def write_log(content, log_placeholder=None):
     st.session_state.log_display.append(log_line)
     with open(LOG_PATH, "a", encoding="utf-8") as f:
         f.write(log_line + "\n")
-    if log_placeholder:
+    
+    # 优化UI更新频率，每3条日志或最后一条日志才更新UI
+    if log_placeholder and (len(st.session_state.log_display) % 3 == 0 or "完成" in content or "失败" in content):
         log_placeholder.code("\n".join(st.session_state.log_display), language="bash")
 
 def count_real_chars(text):
@@ -508,10 +482,10 @@ def render_dag_nodes(pipeline: DAGPipeline, placeholders: Dict):
             </div>
             """, unsafe_allow_html=True)
 
-def extract_latest_novel_from_openclaw():
+def extract_latest_novel_from_output():
     """提取最新生成的小说正文"""
     try:
-        md_files = glob.glob(os.path.join(OPENCLAW_WORKSPACE, "**/*.md"), recursive=True)
+        md_files = glob.glob(os.path.join(OUTPUT_DIR, "**/*.md"), recursive=True)
         if not md_files:
             return None
         md_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
@@ -695,7 +669,7 @@ def run_generate_content(pipeline: DAGPipeline, node_placeholders: Dict, log_pla
         update_plot_record_web(final_content, chapter_num)
         write_log("✅ [节点3/6] 剧情记忆更新完成", log_placeholder)
         
-        write_log("� [节点3/6] 开始保存本地文件", log_placeholder)
+        write_log("💾 [节点3/6] 开始保存本地文件", log_placeholder)
         output_file = os.path.join(OUTPUT_DIR, f"第{chapter_num}章_{real_chars}字.md")
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(final_content)
@@ -1092,67 +1066,11 @@ with col_daemon2:
         st.info("📊 守护进程章节号未初始化，首次生成后自动同步")
 st.markdown("---")
 
-# DAG节点状态面板
-st.subheader("📊 DAG工作流节点状态")
-node_cols = st.columns(8)
-node_placeholders = {}
-for i, col in enumerate(node_cols):
-    node_placeholders[f"node_{i}"] = col.empty()
-
-# 初始化DAG管线
-if st.session_state.pipeline is None:
-    st.session_state.pipeline = init_dag_pipeline(f"init_{datetime.now().strftime('%Y%m%d%H%M%S')}")
-render_dag_nodes(st.session_state.pipeline, node_placeholders)
-st.markdown("---")
-
 # 核心操作区
-st.markdown("### 🛋️ 究极躺平区（内置技能+全功能加持）")
-with st.container():
-    col_lazy1, col_lazy2 = st.columns([1, 2])
-    with col_lazy1:
-        chapter_num = st.number_input("生成章节号", min_value=1, value=st.session_state.current_chapter, step=1)
-        target_words = st.number_input("目标字数", min_value=1000, value=7500, step=500)
-        
-        st.markdown("---")
-        st.subheader("🤖 龙虾Agent选择")
-        if st.button("🔄 刷新Agent列表"):
-            st.session_state.agents_list = get_clawpanel_agents()
-            st.success("✅ Agent列表已刷新！")
-        target_agent = st.selectbox(
-            "选择要调用的Agent",
-            options=st.session_state.agents_list,
-            index=0
-        )
-        
-        if target_agent:
-            skills = get_agent_skills(target_agent)
-            if skills:
-                skill_text = "\n- ".join(skills)
-                st.success(f"✅ Agent「{target_agent}」已挂载的内置技能：\n- {skill_text}")
-            else:
-                st.warning(f"⚠️ 未检测到内置技能")
-        
-        st.markdown("---")
-        st.subheader("🔧 核心功能开关")
-        enable_multi_agent = st.checkbox("多智能体协调模式（网文工作室）", value=True)
-        enable_undercover = st.checkbox("Undercover卧底模式（原生反AI）", value=True)
-        enable_mcp = st.checkbox("MCP跨维工具（联网搜索）", value=True)
-        enable_xcrawl = st.checkbox("xcrawl全网吞噬技能（深度爬取）", value=True)
-        enable_humanizer = st.checkbox("Humanizer二次去AI化（过审保障）", value=True)
-
-    with col_lazy2:
-        custom_prompt = st.text_area(
-            "一句话指令（内置技能加持，直接说脑洞就行）",
-            height=150,
-            placeholder="示例：使用brave-search搜索今天番茄小说最火的废土修仙打脸套路，拿到URL后用xcrawl爬取全文，提炼最狠的打脸语录，用多智能体模式生成第1章，Undercover模式原生反AI！\n（不填则用记忆宫殿自动生成）"
-        )
-
-st.markdown("###")
-lazy_btn = st.button("🔥 一键躺平生成（内置技能+全功能加持）", type="primary", use_container_width=True)
 st.markdown("---")
 
 # 标签页
-tab_memory, tab_5q, tab_outline, tab_serial, tab_log, tab_preview, tab_browser = st.tabs(["🏛️ 记忆宫殿", "🎯 5问选设定", "📋 大纲生成", "🚀 全自动连载", "📟 实时日志", "📖 章节预览", "🌐 浏览器控制"])
+tab_5q, tab_outline, tab_serial, tab_memory, tab_log, tab_preview, tab_browser = st.tabs(["🎯 5问选设定", "📋 大纲生成", "🚀 全自动连载", "🏛️ 记忆宫殿", "📟 实时日志", "📖 章节预览", "🌐 浏览器控制"])
 
 with tab_memory:
     st.subheader("当前锁死的全局设定（结构化记忆系统）")
@@ -1324,7 +1242,10 @@ with tab_outline:
             try:
                 # 调用 LLM 生成大纲
                 engine, _, _ = get_engine()
-                outline_content = engine.humanize_text(outline_prompt)
+                # 使用 Python 引擎的 _call_agent 方法生成大纲
+                from builtin_claude_core.query_engine import ClaudeQueryEngine
+                query_engine = ClaudeQueryEngine()
+                outline_content = query_engine._call_agent("大纲Agent", outline_prompt)
                 
                 # 保存大纲
                 outline_file = os.path.join(SETTING_PATH, "0_全本大纲.md")
@@ -1416,6 +1337,59 @@ with tab_serial:
         if enable_schedule:
             schedule_hour = st.number_input("每日生成时间（小时）", min_value=0, max_value=23, value=3, step=1)
         
+        st.markdown("---")
+        st.subheader("🤖 Agent 选择")
+        if st.button("🔄 刷新Agent列表"):
+            st.session_state.agents_list = get_clawpanel_agents()
+            st.success("✅ Agent列表已刷新！")
+        target_agent = st.selectbox(
+            "选择要调用的Agent",
+            options=st.session_state.agents_list,
+            index=0
+        )
+        
+        if target_agent:
+            skills = get_agent_skills(target_agent)
+            if skills:
+                skill_text = "\n- ".join(skills)
+                st.success(f"✅ Agent「{target_agent}」已挂载的内置技能：\n- {skill_text}")
+            else:
+                st.warning("⚠️ 未检测到内置技能")
+        
+        st.markdown("---")
+        st.subheader("🔧 核心功能开关")
+        enable_multi_agent = st.checkbox("多智能体协调模式（网文工作室）", value=True)
+        enable_undercover = st.checkbox("Undercover卧底模式（原生反AI）", value=True)
+        enable_mcp = st.checkbox("MCP跨维工具（联网搜索）", value=True)
+        enable_xcrawl = st.checkbox("xcrawl全网吞噬技能（深度爬取）", value=True)
+        enable_humanizer = st.checkbox("Humanizer二次去AI化（过审保障）", value=True)
+        
+        st.markdown("---")
+        st.subheader("💬 提示词管理")
+        
+        # 提示词优先级说明
+        st.info("📋 提示词优先级：自定义提示词 > 大纲 > 5问设定")
+        st.markdown("系统会按照上述优先级自动选择提示词来源，当高级别提示词不可用时，会自动使用下一级别的提示词。")
+        
+        # 检查当前可用的提示词来源
+        available_sources = []
+        if os.path.exists(os.path.join(SETTING_PATH, "0_5问设定.md")):
+            available_sources.append("5问设定")
+        if os.path.exists(os.path.join(SETTING_PATH, "0_全本大纲.md")):
+            available_sources.append("大纲")
+        
+        if available_sources:
+            st.success(f"✅ 当前可用的提示词来源：{', '.join(available_sources)}")
+        else:
+            st.warning("⚠️ 未检测到任何提示词来源，请先完成5问设定或大纲生成")
+        
+        # 自定义提示词输入
+        custom_prompt = st.text_area(
+            "自定义提示词（优先级最高）",
+            height=150,
+            placeholder="示例：使用brave-search搜索今天番茄小说最火的废土修仙打脸套路，拿到URL后用xcrawl爬取全文，提炼最狠的打脸语录，用多智能体模式生成第1章，Undercover模式原生反AI！\n（不填则自动使用大纲或5问设定）"
+        )
+        
         # 自动连载按钮
         if st.button("🔥 开始全自动连载", type="primary", use_container_width=True):
             st.info("🔄 正在启动全自动连载...")
@@ -1426,7 +1400,14 @@ with tab_serial:
                 "end_chapter": end_chapter,
                 "target_words": target_words,
                 "enable_schedule": enable_schedule,
-                "schedule_hour": schedule_hour if enable_schedule else None
+                "schedule_hour": schedule_hour if enable_schedule else None,
+                "target_agent": target_agent,
+                "enable_multi_agent": enable_multi_agent,
+                "enable_undercover": enable_undercover,
+                "enable_mcp": enable_mcp,
+                "enable_xcrawl": enable_xcrawl,
+                "enable_humanizer": enable_humanizer,
+                "custom_prompt": custom_prompt
             }
             
             # 保存设置到文件
@@ -1446,9 +1427,148 @@ with tab_serial:
                 # 立即开始生成
                 st.info("🔄 正在生成章节...")
                 
-                # 这里可以调用现有的生成功能
-                # 简化版本：显示成功信息
-                st.success("✅ 全自动连载已启动，正在生成章节！")
+                try:
+                    # 初始化 DAG 管线
+                    pipeline_id = f"serial_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    st.session_state.pipeline = init_dag_pipeline(pipeline_id)
+                    
+                    # 创建节点占位符
+                    node_placeholders = {}
+                    for node_id in st.session_state.pipeline.nodes:
+                        node_placeholders[node_id] = st.empty()
+                    
+                    # 渲染 DAG 节点
+                    render_dag_nodes(st.session_state.pipeline, node_placeholders)
+                    
+                    # 初始化日志占位符
+                    log_placeholder = st.empty()
+                    
+                    # 执行 DAG 全流程
+                    if run_init_check(st.session_state.pipeline, node_placeholders, log_placeholder, serial_settings.get("target_agent", "默认Agent"), serial_settings.get("enable_humanizer", True), serial_settings.get("enable_mcp", True), serial_settings.get("enable_xcrawl", True), serial_settings.get("enable_undercover", True), serial_settings.get("enable_multi_agent", True)):
+                        # 加载设置
+                        success, final_prompt = run_load_settings(st.session_state.pipeline, node_placeholders, log_placeholder, 1, serial_settings.get("custom_prompt", ""), serial_settings.get("enable_mcp", True), [], serial_settings.get("enable_xcrawl", True), serial_settings.get("enable_undercover", True), serial_settings.get("enable_multi_agent", True))
+                        if success:
+                            # 生成章节
+                            current_chapter = serial_settings.get("start_chapter", 1)
+                            end_chapter = serial_settings.get("end_chapter", 10)
+                            target_words = serial_settings.get("target_words", 7500)
+                            
+                            # 读取大纲内容作为提示词
+                            with open(outline_file, "r", encoding="utf-8") as f:
+                                outline_content = f.read()
+                            
+                            # 生成章节内容
+                            for chapter_num in range(current_chapter, end_chapter + 1):
+                                update_node_status(st.session_state.pipeline, "generate_content", NodeStatus.RUNNING, node_placeholders, result={"chapter_num": chapter_num})
+                                
+                                st.info(f"🔄 正在生成第{chapter_num}章...")
+                                
+                                # 构建章节生成提示词
+                                def get_prompt_by_priority(serial_settings, outline_content, chapter_num, target_words):
+                                    """
+                                    根据优先级获取提示词
+                                    优先级：自定义提示词 > 大纲 > 5问设定
+                                    """
+                                    # 1. 首先尝试使用自定义提示词
+                                    if serial_settings.get("custom_prompt", ""):
+                                        return ("custom_prompt", serial_settings.get("custom_prompt", ""))
+                                    
+                                    # 2. 然后尝试使用大纲
+                                    if outline_content:
+                                        chapter_prompt = f"""
+基于以下大纲，生成网络小说第{chapter_num}章的完整正文。
+要求：
+1. 字数要求：{target_words}字
+2. 严格贴合大纲，保持剧情连贯
+3. 保持人物设定和世界观的一致性
+4. 包含适当的冲突和悬念
+5. 只输出正文，不要任何解释或标题
+
+{outline_content}
+                                        """
+                                        return ("outline", chapter_prompt)
+                                    
+                                    # 3. 最后尝试使用5问设定
+                                    setting_file = os.path.join(SETTING_PATH, "0_5问设定.md")
+                                    if os.path.exists(setting_file):
+                                        with open(setting_file, "r", encoding="utf-8") as f:
+                                            setting_content = f.read()
+                                        chapter_prompt = f"""
+基于以下设定，生成网络小说第{chapter_num}章的完整正文。
+要求：
+1. 字数要求：{target_words}字
+2. 保持人物设定和世界观的一致性
+3. 包含适当的冲突和悬念
+4. 只输出正文，不要任何解释或标题
+
+{setting_content}
+                                        """
+                                        return ("five_questions", chapter_prompt)
+                                    
+                                    # 如果所有提示词来源都不可用，使用默认提示词
+                                    default_prompt = f"生成网络小说第{chapter_num}章的完整正文，字数要求：{target_words}字"
+                                    return ("default", default_prompt)
+                                
+                                # 获取提示词
+                                prompt_source, chapter_prompt = get_prompt_by_priority(serial_settings, outline_content, chapter_num, target_words)
+                                st.info(f"📝 使用提示词来源：{prompt_source}")
+                                
+                                # 导入必要的模块
+                                from builtin_claude_core.query_engine import ClaudeQueryEngine
+                                from builtin_claude_core.memory_palace import get_memory_palace
+                                
+                                # 初始化引擎
+                                query_engine = ClaudeQueryEngine()
+                                memory_palace = get_memory_palace()
+                                
+                                # 调用 Claude 核心生成章节
+                                try:
+                                    agent_result = query_engine.multi_agent_coordinate(
+                                        chapter_num=chapter_num,
+                                        target_words=target_words,
+                                        custom_prompt=chapter_prompt,
+                                        chapter_outline="",
+                                        chapter_name=f"第{chapter_num}章"
+                                    )
+                                    
+                                    final_content = agent_result["content"]
+                                    real_chars = agent_result["real_chars"]
+                                    
+                                    update_node_status(st.session_state.pipeline, "generate_content", NodeStatus.SUCCESS, node_placeholders, result={"chapter_num": chapter_num, "real_chars": real_chars})
+                                except Exception as e:
+                                    error_msg = f"章节生成失败：{str(e)}"
+                                    update_node_status(st.session_state.pipeline, "generate_content", NodeStatus.FAILED, node_placeholders, error_msg=error_msg)
+                                    st.error(error_msg)
+                                    import traceback
+                                    traceback.print_exc()
+                                    continue
+                                
+                                # 保存章节内容
+                                output_file = os.path.join(OUTPUT_DIR, f"第{chapter_num}章_{real_chars}字_{datetime.now().strftime('%Y%m%d%H%M')}.md")
+                                with open(output_file, "w", encoding="utf-8") as f:
+                                    f.write(final_content)
+                                
+                                # 更新记忆宫殿
+                                memory_palace.add_chapter(chapter_num, f"第{chapter_num}章", final_content)
+                                memory_palace.save_to_disk()
+                                
+                                # 更新当前章节进度
+                                st.session_state.current_chapter = chapter_num
+                                
+                                st.success(f"✅ 第{chapter_num}章生成完成，字数：{real_chars}字")
+                            
+                            # 完成全本
+                            st.session_state.current_chapter = end_chapter
+                            
+                            # 执行完成节点
+                            run_finish(st.session_state.pipeline, node_placeholders, log_placeholder)
+                            
+                            st.success("🎉 全本完本！所有章节已生成完成！")
+                            
+                except Exception as e:
+                    st.error(f"❌ 章节生成失败：{str(e)}")
+                    import traceback
+                    traceback.print_exc()
         
         # 进度显示
         st.markdown("### 连载进度")
@@ -1464,11 +1584,20 @@ with tab_serial:
             total_chapters = serial_settings.get("end_chapter", 10)
             
             # 计算进度百分比
-            progress = min(100, (current_chapter - serial_settings.get("start_chapter", 1) + 1) / (total_chapters - serial_settings.get("start_chapter", 1) + 1) * 100)
+            start_chapter = serial_settings.get("start_chapter", 1)
+            chapter_range = total_chapters - start_chapter + 1
+            if chapter_range <= 0:
+                progress_percent = 100
+                progress = 1.0
+            else:
+                # 确保进度值在 0.0 到 1.0 之间
+                completed_chapters = max(0, current_chapter - start_chapter + 1)
+                progress_percent = min(100, completed_chapters / chapter_range * 100)
+                progress = max(0.0, min(1.0, progress_percent / 100.0))
             
             # 显示进度条
             st.progress(progress)
-            st.info(f"📊 当前进度：第{current_chapter}章 / 共{total_chapters}章 ({progress:.1f}%)")
+            st.info(f"📊 当前进度：第{current_chapter}章 / 共{total_chapters}章 ({progress_percent:.1f}%)")
             
             # 检查是否完成全本
             if current_chapter >= total_chapters:
@@ -1661,29 +1790,4 @@ with tab_browser:
         st.info("暂无浏览器操作日志")
 
 # ================= 生成按钮触发逻辑 =================
-if lazy_btn:
-    chapter_title = f"第{chapter_num}章"
-    pipeline_id = f"novel_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    st.session_state.pipeline = init_dag_pipeline(pipeline_id)
-    st.session_state.log_display = []
-    st.session_state.rollback_data = {}
-    render_dag_nodes(st.session_state.pipeline, node_placeholders)
-    
-    mcp_servers = get_mcp_servers() if enable_mcp else []
-    
-    # 执行DAG全流程
-    if run_init_check(st.session_state.pipeline, node_placeholders, log_placeholder, target_agent, enable_humanizer, enable_mcp, enable_xcrawl, enable_undercover, enable_multi_agent):
-        success, final_prompt = run_load_settings(st.session_state.pipeline, node_placeholders, log_placeholder, chapter_num, custom_prompt, enable_mcp, mcp_servers, enable_xcrawl, enable_undercover, enable_multi_agent)
-        if success:
-            success, raw_content, real_chars = run_generate_content(st.session_state.pipeline, node_placeholders, log_placeholder, chapter_num, chapter_title, final_prompt, target_words, target_agent, enable_humanizer, enable_multi_agent)
-            if success:
-                success, final_content = run_humanizer_process(st.session_state.pipeline, node_placeholders, log_placeholder, raw_content, target_agent, enable_humanizer)
-                if success:
-                    run_update_plot(st.session_state.pipeline, node_placeholders, log_placeholder, final_content, chapter_num)
-                    success, github_url, md5 = run_github_archive(st.session_state.pipeline, node_placeholders, log_placeholder, chapter_title, final_content)
-                    if success:
-                        final_chars = count_real_chars(final_content)
-                        if run_notion_write(st.session_state.pipeline, node_placeholders, log_placeholder, chapter_title, final_content, github_url, md5, final_chars):
-                            run_finish(st.session_state.pipeline, node_placeholders, log_placeholder)
-                            st.success("🎉 全流程闭环完成！内置技能+Undercover模式+多智能体加持，质量拉满！下一章章节号已自动更新！")
-                            st.rerun()
+# 一键躺平生成功能已整合到全自动连载中

@@ -101,7 +101,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--hour", type=int, default=3, help="每日自动生成时间（小时）")
     parser.add_argument("--chapter-file", type=str, default="current_chapter.txt", help="章节号文件路径")
+    parser.add_argument("--novel-name", type=str, help="小说名称")
+    parser.add_argument("--install", action="store_true", help="安装守护进程")
+    parser.add_argument("--uninstall", action="store_true", help="卸载守护进程")
+    parser.add_argument("--status", action="store_true", help="查看守护进程状态")
+    parser.add_argument("--run-once", action="store_true", help="手动执行单次生成")
     args = parser.parse_args()
 
+    # 这里可以添加对新参数的处理逻辑
+    # 目前先保持简单，直接运行守护进程
     daemon = KairosDaemon(gen_hour=args.hour, chapter_file=args.chapter_file)
     daemon.run()

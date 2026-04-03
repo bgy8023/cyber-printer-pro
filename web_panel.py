@@ -113,49 +113,21 @@ def reload_env():
 NOTION_TOKEN, NOTION_DATABASE_ID, GITHUB_TOKEN, GITHUB_REPO = reload_env()
 LOG_PATH = os.getenv("SYSTEM_LOG_PATH", "system.log")
 SETTING_PATH = get_resource_path("novel_settings")
-GEN_SCRIPT_PATH = get_resource_path("run_openclaw.sh")
-OPENCLAW_WORKSPACE = os.path.expanduser("~/.openclaw/workspace")
-OPENCLAW_CONFIG_PATH = os.path.expanduser("~/.openclaw/config")
+GEN_SCRIPT_PATH = get_resource_path("run_claude_core.sh")
+OUTPUT_DIR = get_resource_path("output")
 DAEMON_SCRIPT_PATH = get_resource_path("claw_kairos_daemon.sh")
 CHAPTER_NUM_FILE = os.path.expanduser("~/OpenClaw_Arch/current_chapter.txt")
 
+# 确保输出目录存在
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 def get_clawpanel_agents() -> List[str]:
-    """自动检测clawpanel里的所有Agent"""
+    """获取可用的智能体列表"""
     try:
-        agents = ["default"]
-        if os.path.exists(OPENCLAW_CONFIG_PATH):
-            config_files = glob.glob(os.path.join(OPENCLAW_CONFIG_PATH, "*.json"))
-            config_files += glob.glob(os.path.join(OPENCLAW_CONFIG_PATH, "*.yaml"))
-            config_files += glob.glob(os.path.join(OPENCLAW_CONFIG_PATH, "*.yml"))
-            agent_dirs = glob.glob(os.path.join(OPENCLAW_WORKSPACE, "agents", "*"))
-            for agent_dir in agent_dirs:
-                if os.path.isdir(agent_dir):
-                    agent_name = os.path.basename(agent_dir)
-                    if agent_name not in agents:
-                        agents.append(agent_name)
-        try:
-            result = subprocess.run(
-                [os.path.join(OPENCLAW_WORKSPACE, "claw"), "agent", "list"],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=5
-            )
-            if result.returncode == 0:
-                lines = result.stdout.split("\n")
-                for line in lines:
-                    line = line.strip()
-                    if line and not line.startswith("#") and not line.startswith("-"):
-                        parts = re.split(r"\s+", line)
-                        if parts:
-                            agent_name = parts[0]
-                            if agent_name not in agents and agent_name.lower() not in ["name", "agent", "id"]:
-                                agents.append(agent_name)
-        except:
-            pass
+        agents = ["main", "main-2"]
         return sorted(list(set(agents)))
-    except:
-        return ["default"]
+    except Exception:
+        return ["main", "main-2"]
 
 def get_agent_skills(agent_name: str) -> List[str]:
     """从内置技能目录读取技能列表"""
@@ -345,10 +317,10 @@ def render_dag_nodes(pipeline: DAGPipeline, placeholders: Dict):
             </div>
             """, unsafe_allow_html=True)
 
-def extract_latest_novel_from_openclaw():
+def extract_latest_novel_from_output():
     """提取最新生成的小说正文"""
     try:
-        md_files = glob.glob(os.path.join(OPENCLAW_WORKSPACE, "**/*.md"), recursive=True)
+        md_files = glob.glob(os.path.join(OUTPUT_DIR, "**/*.md"), recursive=True)
         if not md_files:
             return None
         md_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
@@ -488,17 +460,17 @@ def run_generate_content(pipeline: DAGPipeline, node_placeholders: Dict, log_pla
             
             for line in process.stdout:
                 if line.strip():
-                    write_log(f"[OpenClaw] {line.strip()}", log_placeholder)
+                    write_log(f"[Claude Core] {line.strip()}", log_placeholder)
             process.wait(timeout=300)
             if process.returncode not in [0, 124]:
-                raise Exception(f"OpenClaw执行失败，返回码：{process.returncode}")
+                raise Exception(f"生成脚本执行失败，返回码：{process.returncode}")
         else:
-            raise Exception("未找到OpenClaw胶水脚本")
+            raise Exception("未找到生成脚本")
         
-        write_log("📂 [节点3] 正在从OpenClaw工作区提取小说正文...", log_placeholder)
-        generated_content = extract_latest_novel_from_openclaw()
+        write_log("📂 [节点3] 正在从输出目录提取小说正文...", log_placeholder)
+        generated_content = extract_latest_novel_from_output()
         if not generated_content:
-            raise Exception("无法从OpenClaw工作区提取小说正文")
+            raise Exception("无法从输出目录提取小说正文")
         
         generated_content = clean_mermaid_code(generated_content)
         real_chars = count_real_chars(generated_content)

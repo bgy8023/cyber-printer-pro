@@ -1,0 +1,14 @@
+{
+  "start_chapter": 8,
+  "end_chapter": 9,
+  "target_words": 5000,
+  "enable_schedule": false,
+  "schedule_hour": null,
+  "target_agent": "main",
+  "enable_multi_agent": true,
+  "enable_undercover": true,
+  "enable_mcp": true,
+  "enable_xcrawl": true,
+  "enable_humanizer": true,
+  "custom_prompt": ""
+}

@@ -243,22 +243,28 @@ class ClaudeQueryEngine:
             logger.info("✅ 主笔Agent：正文生成完成")
             
             real_chars = self._count_real_chars(raw_content)
-            max_loop = 5
+            max_loop = 3  # 减少补全次数
             current_loop = 0
             
             while real_chars < int(target_words * 0.95) and current_loop < max_loop:
                 current_loop += 1
                 logger.info(f"📝 第{current_loop}次补全字数，当前：{real_chars}/{target_words}")
                 
+                # 优化补全提示词，明确要求补全到目标字数
                 supplement_prompt = self.undercover_process(f"""
 基于上文结尾续写小说正文，补全到{target_words}字，保持剧情连贯，人设不崩，只输出续写的内容，不要重复上文。
-上文结尾：{raw_content[-2000:]}
+请一次性补全到目标字数，不要分段输出。
+上文结尾：{raw_content[-1500:]}
 核心设定：{relevant_memory}
                 """)
                 
                 supplement_content = self._call_agent("补全Agent", supplement_prompt)
                 raw_content += "\n\n" + supplement_content
                 real_chars = self._count_real_chars(raw_content)
+                
+                # 如果已经补全到目标字数的98%以上，不再继续补全
+                if real_chars >= int(target_words * 0.98):
+                    break
             
             logger.info("🔍 审核Agent：正在校验内容")
             check_prompt = f"""
@@ -307,13 +313,14 @@ class ClaudeQueryEngine:
                     chapter_outline=chapter_outline
                 )
                 
-                if check_result.rewrite_needed and current_attempt < max_rewrite_attempts:
-                    logger.warning(f"⚠️  校验失败，准备重写...")
+                if check_result.rewrite_needed and check_result.score < 70 and current_attempt < max_rewrite_attempts:
+                    # 只有当评分低于70分时才重写，避免轻微问题就重写
+                    logger.warning(f"⚠️  校验失败，评分：{check_result.score}，准备重写...")
                     current_attempt += 1
                     custom_prompt = f"{custom_prompt}\n\n【重写要求】{check_result.rewrite_suggestion}"
                     continue
                 else:
-                    logger.info("✅ 连贯性校验通过")
+                    logger.info(f"✅ 连贯性校验通过，评分：{check_result.score}")
                     self.memory_palace.add_chapter(
                         chapter_num=chapter_num,
                         chapter_name=chapter_name,
@@ -327,127 +334,7 @@ class ClaudeQueryEngine:
         
         return final_result
     
-    def multi_agent_coordinate_legacy(self, chapter_num: int, target_words: int, custom_prompt: str, relevant_memory: str) -> Dict[str, Any]:
-        """
-        多智能体协调调度，参考Claude源码Coordinator模式
-        分工：大纲Agent→主笔Agent→审核Agent→润色Agent，流水线式创作
-        """
-        logger.info("🤖 多智能体协调模式已激活")
-        
-        # 检查 LLM 适配器是否初始化，没有的话才初始化
-        if not hasattr(self, 'llm_adapter') or self.llm_adapter is None:
-            logger.info("🔄 LLM 适配器未初始化，正在初始化...")
-            self._init_llm_adapter()
-        else:
-            logger.info("✅ 使用已初始化的 LLM 适配器")
-        
-        final_result = {
-            "outline": "",
-            "content": "",
-            "real_chars": 0,
-            "target_words": target_words
-        }
 
-        logger.info("📋 大纲Agent：正在规划章节剧情")
-        outline_prompt = self.undercover_process(f"""
-你是专业网文大纲师，基于以下设定，规划网络小说第{chapter_num}章的详细大纲。
-要求：
-1. 大纲必须包含：开头冲突、中段打脸高潮、围观群众反应、结尾悬念钩子
-2. 严格贴合核心设定，不能崩人设、不能吃书
-3. 大纲要支撑{target_words}字的正文内容，节奏紧凑，爽点密集
-4. 只输出大纲，不要任何多余解释
-
-【核心设定】
-{relevant_memory}
-【用户要求】
-{custom_prompt}
-        """)
-
-        outline_content = self._call_agent("大纲Agent", outline_prompt)
-        final_result["outline"] = outline_content
-        logger.info("✅ 大纲Agent：剧情规划完成")
-
-        logger.info("✍️ 主笔Agent：正在生成正文")
-        content_prompt = self.undercover_process(f"""
-你是专业网文主笔，严格按照下面的大纲，生成网络小说第{chapter_num}章的完整正文。
-要求：
-1. 正文总字数必须达到{target_words}字，误差不超过5%
-2. 严格贴合大纲，不崩人设、不吃书，保持剧情连贯
-3. 爽点密集，节奏快，对话自然，细节到位
-4. 结尾必须留下悬念钩子，吸引读者看下一章
-5. 只输出正文，不要任何解释、标题、备注
-
-【章节大纲】
-{outline_content}
-【核心设定】
-{relevant_memory}
-        """)
-
-        raw_content = self._call_agent("主笔Agent", content_prompt)
-        logger.info("✅ 主笔Agent：正文生成完成")
-
-        real_chars = self._count_real_chars(raw_content)
-        max_loop = 5
-        current_loop = 0
-
-        while real_chars < int(target_words * 0.95) and current_loop < max_loop:
-            current_loop += 1
-            logger.info(f"📝 第{current_loop}次补全字数，当前：{real_chars}/{target_words}")
-            
-            supplement_prompt = self.undercover_process(f"""
-基于上文结尾续写小说正文，补全到{target_words}字，保持剧情连贯，人设不崩，只输出续写的内容，不要重复上文。
-上文结尾：{raw_content[-2000:]}
-核心设定：{relevant_memory}
-            """)
-            
-            supplement_content = self._call_agent("补全Agent", supplement_prompt)
-            raw_content += "\n\n" + supplement_content
-            real_chars = self._count_real_chars(raw_content)
-
-        final_result["content"] = raw_content
-        final_result["real_chars"] = real_chars
-        logger.info(f"✅ 正文最终字数：{real_chars}/{target_words}")
-
-        logger.info("🔍 审核Agent：正在校验内容")
-        check_prompt = f"""
-你是专业网文审核师，检查下面的小说正文，完成以下校验：
-1. 核对人设、剧情是否符合核心设定，有没有吃书、崩人设
-2. 检查剧情是否连贯，逻辑是否通顺，有没有前后矛盾
-3. 检查有没有不符合网文规范的内容
-4. 如果有问题，直接修改正文，修正问题，保持原意不变
-5. 如果没有问题，直接输出原文
-6. 只输出最终的正文，不要任何解释、备注
-
-【核心设定】
-{relevant_memory}
-【小说正文】
-{raw_content}
-        """
-
-        checked_content = self._call_agent("审核Agent", check_prompt)
-        final_result["content"] = checked_content
-        final_result["real_chars"] = self._count_real_chars(checked_content)
-        logger.info("✅ 审核Agent：内容校验完成")
-
-        logger.info("🧹 润色Agent：正在去AI化优化")
-        humanize_prompt = self.undercover_process(f"""
-你是专业网文润色师，对下面的小说正文进行去AI化润色。
-要求：
-1. 严格保留原剧情、人设、爽点、总字数不变
-2. 优化句子节奏，混合长短句，让文本更像真人写的网文
-3. 去除AI写作痕迹，让对话更自然，细节更生动
-4. 只输出润色后的完整正文，不要任何解释、备注
-
-【小说正文】
-{checked_content}
-        """)
-
-        final_content = self._call_agent("润色Agent", humanize_prompt)
-        final_result["content"] = final_content
-        final_result["real_chars"] = self._count_real_chars(final_content)
-        logger.info("✅ 润色Agent：去AI化优化完成")
-
-        return final_result
 
     def _call_agent(self, agent_name: str, prompt: str) -> str:
         """调用子Agent，使用 LLM 适配器生成内容"""
