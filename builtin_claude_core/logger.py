@@ -1,25 +1,43 @@
-
-import logging
+# 统一日志配置
 import os
-from datetime import datetime
+import sys
+from loguru import logger
 
-
-LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+# 日志目录
+LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
+# 清除默认配置
+logger.remove()
 
-LOG_FILE = os.path.join(LOG_DIR, f"cyber_printer_{datetime.now().strftime('%Y%m%d')}.log")
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.FileHandler(LOG_FILE, encoding="utf-8"),
-        logging.StreamHandler()
-    ]
+# 控制台输出
+logger.add(
+    sys.stdout,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+    level="INFO",
+    enqueue=True
 )
 
+# 文件输出
+logger.add(
+    os.path.join(LOG_DIR, "app_{time:YYYY-MM-DD}.log"),
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+    level="DEBUG",
+    rotation="00:00",
+    retention="30 days",
+    compression="zip",
+    enqueue=True
+)
 
-logger = logging.getLogger("CyberPrinter")
+# 错误日志单独输出
+logger.add(
+    os.path.join(LOG_DIR, "error_{time:YYYY-MM-DD}.log"),
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+    level="ERROR",
+    rotation="00:00",
+    retention="90 days",
+    compression="zip",
+    enqueue=True
+)
+
+__all__ = ["logger"]

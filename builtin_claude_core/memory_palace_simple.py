@@ -1,15 +1,17 @@
+# 简化版双层记忆宫殿 - 原子级读写，彻底解决竞争条件
 import os
 import json
 import time
+import tempfile
 from typing import Dict, List, Optional
+from filelock import FileLock
 from .logger import logger
-from .file_lock import FileLock
 
 class SimpleMemoryPalace:
     """
     简化版双层记忆宫殿
-    L1 固定记忆层：novel_settings/下的00-全本大纲.md、01-人物档案.md（只读，绝对不允许修改）
-    L2 动态记忆层：自动生成的03-动态剧情记忆.json（可写，每章更新）
+    L1 固定记忆层：novel_settings/下的全本大纲、人物档案、世界观设定（只读，绝对不允许修改）
+    L2 动态记忆层：自动生成的动态剧情记忆.json（原子级读写，跨进程安全）
     """
     def __init__(self, novel_name: str = "默认小说"):
         self.novel_name = novel_name
@@ -20,15 +22,17 @@ class SimpleMemoryPalace:
         self.fixed_memory: Dict[str, str] = {}
         self._load_fixed_memory()
         
-        # L2 动态记忆（可写）
+        # L2 动态记忆（原子级读写）
         self.dynamic_memory: Dict = {
             "generated_chapters": [],
-            "last_update": ""
+            "last_update": "",
+            "version": 1
         }
         self._load_dynamic_memory()
         
-        logger.info(f"✅ 简化版双层记忆宫殿初始化完成，小说：{novel_name}")
+        logger.info(f"✅ 双层记忆宫殿初始化完成，小说：{novel_name}")
 
+    # ========== L1 固定记忆核心方法 ==========
     def _load_fixed_memory(self):
         """加载只读固定记忆：大纲、人物、世界观"""
         fixed_files = {
@@ -40,6 +44,7 @@ class SimpleMemoryPalace:
         for key, filename in fixed_files.items():
             file_path = os.path.join(self.base_dir, filename)
             if not os.path.exists(file_path):
+                # 如果文件不存在，从默认模板复制
                 default_file = os.path.join("novel_settings", "番茄爆款写作心法", filename)
                 if os.path.exists(default_file):
                     import shutil
@@ -48,10 +53,9 @@ class SimpleMemoryPalace:
             
             if os.path.exists(file_path):
                 try:
-                    with FileLock(file_path):
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            self.fixed_memory[key] = f.read()
-                            logger.info(f"✅ 固定记忆加载完成：{key}")
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        self.fixed_memory[key] = f.read()
+                        logger.info(f"✅ 固定记忆加载完成：{key}")
                 except Exception as e:
                     logger.error(f"❌ 固定记忆加载失败：{filename}", exc_info=True)
 
@@ -69,57 +73,102 @@ class SimpleMemoryPalace:
         character_content = self.fixed_memory.get("character", "")
         if not character_content:
             return []
-        names = []
-        lines = character_content.split('\n')
-        for line in lines:
-            if '：' in line or ':' in line:
-                parts = re.split(r'[：:]', line, 1)
-                if len(parts) > 1:
-                    name_part = parts[1].strip()
-                    name = re.split(r'[\s\-]', name_part)[0]
-                    if name:
-                        names.append(name)
-        return names
+        # 匹配"主角：XXX"、"反派：XXX"格式
+        matches = re.findall(r"[：:]\s*([^\s\-]+)", character_content)
+        return [name.strip() for name in matches if name.strip()]
 
+    # ========== L2 动态记忆核心方法（原子级修复版） ==========
     def _load_dynamic_memory(self):
-        """加载动态记忆"""
-        dynamic_file = os.path.join(self.base_dir, "03-动态剧情记忆.json")
-        if os.path.exists(dynamic_file):
-            try:
-                with FileLock(dynamic_file):
-                    with open(dynamic_file, "r", encoding="utf-8") as f:
+        """线程/进程安全的动态记忆加载，原子操作"""
+        self.dynamic_file = os.path.join(self.base_dir, "03-动态剧情记忆.json")
+        self.lock_file = self.dynamic_file + ".lock"
+        self.lock = FileLock(self.lock_file, timeout=10)  # 10秒超时，防止死锁
+
+        # 原子级读操作
+        try:
+            with self.lock:
+                if os.path.exists(self.dynamic_file):
+                    with open(self.dynamic_file, "r", encoding="utf-8") as f:
                         self.dynamic_memory = json.load(f)
-                logger.info("✅ 动态记忆加载完成")
-            except Exception as e:
-                logger.error(f"❌ 动态记忆加载失败：{str(e)}", exc_info=True)
+                    logger.info("✅ 动态记忆加载完成")
+                else:
+                    # 初始化默认结构
+                    self._save_dynamic_memory()
+        except Exception as e:
+            logger.error(f"❌ 动态记忆加载失败：{str(e)}", exc_info=True)
+            self.dynamic_memory = {
+                "generated_chapters": [],
+                "last_update": "",
+                "version": 1
+            }
 
     def _save_dynamic_memory(self):
-        """保存动态记忆"""
-        dynamic_file = os.path.join(self.base_dir, "03-动态剧情记忆.json")
+        """
+        原子级写入操作，彻底解决竞争条件
+        读-改-写全程持有锁，临时文件原子替换，进程崩溃也不会损坏文件
+        """
         try:
-            with FileLock(dynamic_file):
-                with open(dynamic_file, "w", encoding="utf-8") as f:
-                    json.dump(self.dynamic_memory, f, ensure_ascii=False, indent=2)
+            # 全程持有锁，绝不释放
+            with self.lock:
+                # 版本号自增，防止脏写
+                self.dynamic_memory["version"] = self.dynamic_memory.get("version", 1) + 1
+                self.dynamic_memory["last_update"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+                # 1. 先写入同目录临时文件，确保同文件系统（原子替换的前提）
+                temp_file = tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=self.base_dir,
+                    suffix=".tmp",
+                    delete=False
+                )
+
+                try:
+                    json.dump(self.dynamic_memory, temp_file, ensure_ascii=False, indent=2)
+                    temp_file.flush()
+                    os.fsync(temp_file.fileno())  # 强制刷入磁盘，防止系统缓存
+                finally:
+                    temp_file.close()
+
+                # 2. 原子替换原文件，同文件系统下100%原子操作
+                os.replace(temp_file.name, self.dynamic_file)
+                logger.info(f"✅ 动态记忆原子写入完成，版本号：{self.dynamic_memory['version']}")
+
         except Exception as e:
             logger.error(f"❌ 动态记忆保存失败：{str(e)}", exc_info=True)
+            # 清理临时文件
+            if 'temp_file' in locals() and os.path.exists(temp_file.name):
+                os.unlink(temp_file.name)
 
     def update_chapter_memory(self, chapter_num: int, chapter_summary: str, word_count: int):
-        """更新单章生成后的动态记忆"""
-        chapter_info = {
-            "chapter_num": chapter_num,
-            "summary": chapter_summary,
-            "word_count": word_count,
-            "generate_time": time.strftime("%Y-%m-%d %H:%M:%S")
-        }
-        self.dynamic_memory["generated_chapters"] = [
-            c for c in self.dynamic_memory["generated_chapters"] if c["chapter_num"] != chapter_num
-        ]
-        self.dynamic_memory["generated_chapters"].append(chapter_info)
-        self.dynamic_memory["generated_chapters"].sort(key=lambda x: x["chapter_num"])
-        self.dynamic_memory["last_update"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        
-        self._save_dynamic_memory()
-        logger.info(f"✅ 第{chapter_num}章动态记忆更新完成")
+        """更新章节记忆，全程原子操作，无竞争窗口"""
+        try:
+            # 全程持有锁，读-改-写一次性完成
+            with self.lock:
+                # 重新读取最新数据，防止锁等待期间数据被修改
+                if os.path.exists(self.dynamic_file):
+                    with open(self.dynamic_file, "r", encoding="utf-8") as f:
+                        self.dynamic_memory = json.load(f)
+
+                # 修改数据
+                chapter_info = {
+                    "chapter_num": chapter_num,
+                    "summary": chapter_summary,
+                    "word_count": word_count,
+                    "generate_time": time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+                # 去重
+                self.dynamic_memory["generated_chapters"] = [
+                    c for c in self.dynamic_memory["generated_chapters"] if c["chapter_num"] != chapter_num
+                ]
+                self.dynamic_memory["generated_chapters"].append(chapter_info)
+                self.dynamic_memory["generated_chapters"].sort(key=lambda x: x["chapter_num"])
+                
+                # 原子写入
+                self._save_dynamic_memory()
+
+        except Exception as e:
+            logger.error(f"❌ 章节记忆更新失败：{str(e)}", exc_info=True)
 
     def get_previous_summary(self, max_chapters: int = 2) -> str:
         """获取前几章的剧情摘要，用于承上启下"""
@@ -135,6 +184,7 @@ class SimpleMemoryPalace:
             parts.append(f"第{c['chapter_num']}章：{c['summary']}")
         return "\n".join(parts)
 
+# 全局单例管理
 _memory_instance: Optional[SimpleMemoryPalace] = None
 
 def get_memory_palace(novel_name: str = "默认小说") -> SimpleMemoryPalace:

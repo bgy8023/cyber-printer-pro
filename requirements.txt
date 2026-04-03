@@ -1,19 +1,19 @@
-# 通用LLM调用（行业标准，兼容所有OpenAI格式模型）
-openai>=1.0.0
-# 配置管理
-python-dotenv>=1.0.0
-# Notion对接
-notion-client>=2.0.0
-# 网络请求
-requests>=2.31.0
+# 核心大模型统一接入层，支持100+大模型，自带重试、异常处理、异步支持
+litellm>=1.40.0
 # 可视化面板
 streamlit>=1.30.0
-# 文件锁（并发安全）
+# 配置文件管理
+pyyaml>=6.0
+python-dotenv>=1.0.0
+# 异步与并发
+aiohttp>=3.9.0
+# 时间与日期
+python-dateutil>=2.8.0
+# 日志与调试
+loguru>=0.7.0
+# 数据处理
+pandas>=2.0.0
+# 网络请求
+requests>=2.31.0
+# 跨进程文件锁
 filelock>=3.13.0
-# 性能监控
-pyyaml>=6.0.1
-# 语义记忆向量搜索
-annoy>=1.17.0
-numpy>=1.24.0
-# 系统监控
-psutil>=7.0.0

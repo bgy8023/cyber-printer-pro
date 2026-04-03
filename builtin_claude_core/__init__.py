@@ -1,10 +1,25 @@
+# 赛博印钞机 Pro 核心模块导出
+__version__ = "2.3.0"
 
+# 核心推理引擎
+from .query_engine import AsyncQueryEngine, get_session_engine
+
+# 记忆系统
+from .memory_palace_simple import SimpleMemoryPalace, get_memory_palace
+
+# 一致性校验器
+from .consistency_checker import HardRuleConsistencyChecker, ConsistencyCheckResult
+
+# 日志
 from .logger import logger
-from .query_engine import ClaudeQueryEngine
-from .kairos_daemon import KairosDaemon
-from .config_manager import ConfigManager
-from .metrics import MetricsCollector, GenerationMetrics
-from .file_lock import FileLockManager, lock_manager
-from .semantic_memory import SemanticMemory, semantic_memory
 
-__all__ = ["logger", "ClaudeQueryEngine", "KairosDaemon", "ConfigManager", "MetricsCollector", "GenerationMetrics", "FileLockManager", "lock_manager", "SemanticMemory", "semantic_memory"]
+# 全部导出
+__all__ = [
+    "AsyncQueryEngine",
+    "get_session_engine",
+    "SimpleMemoryPalace",
+    "get_memory_palace",
+    "HardRuleConsistencyChecker",
+    "ConsistencyCheckResult",
+    "logger",
+]
