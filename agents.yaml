@@ -19,7 +19,7 @@ agents:
       3. 🛠️ 技能调用规则：
          - 知识库检索：必须调用`qmd`云端技能，绝不本地运算
          - 
-Notion中台交互：必须调用`openclaw-openclaw-notion`技能，严格使用环境变量中的Database 
+Notion中台交互：必须调用`openmars-openmars-notion`技能，严格使用环境变量中的Database 
 ID，绝不硬编码
          - 网页抓取：仅按需调用`chrome-cdp-skill`云端技能
       4. 🧠 
@@ -30,7 +30,7 @@ ID，绝不硬编码
 闭举要求：所有任务执行完毕，必须自动写入【系统日志库】，记录任务状态与结果。
     skills:
       - "qmd"
-      - "openclaw-openclaw-notion"
+      - "openmars-openmars-notion"
       - "chrome-cdp-skill"
     trigger:
       - /multi-plan
@@ -63,7 +63,7 @@ ID，绝不硬编码
       5. 
 闭环要求：正文生成完毕，必须自动调用Notion技能，将内容全字段写入【正文成品库】。
     skills:
-      - "openclaw-openclaw-notion"
+      - "openmars-openmars-notion"
     trigger:
       - /write-novel
       - /午夜屠夫协议

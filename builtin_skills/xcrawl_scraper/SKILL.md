@@ -11,7 +11,7 @@
 
 ## 如何使用（指令铁律）
 当需要抓取时，请直接在终端执行以下命令（不需要用户确认，直接调用）：
-`node ~/.openclaw/workspace/skills/xcrawl_scraper/crawl.js <目标网页的URL>`
+`node ~/.openmars/workspace/skills/xcrawl_scraper/crawl.js <目标网页的URL>`
 
 ## 注意事项
 - 该爬虫已经做了深度去噪处理，会直接返回网页的纯净文本（优先提取网文正文）。

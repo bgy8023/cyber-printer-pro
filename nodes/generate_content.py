@@ -21,7 +21,7 @@ def generate_content_node(node_id: str, node_name: str, pipeline: DAGPipeline, c
         target_agent = context.get("target_agent", "default")
         enable_humanizer = context.get("enable_humanizer", False)
         
-        gen_script_path = get_resource_path("run_openclaw.sh")
+        gen_script_path = get_resource_path("run_openmars.sh")
         if gen_script_path and os.path.exists(gen_script_path):
             env = os.environ.copy()
             if hasattr(sys, '_MEIPASS'):

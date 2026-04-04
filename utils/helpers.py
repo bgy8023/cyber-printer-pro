@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 from typing import Tuple, List, Optional, Dict, Any
 
 # 全局路径变量
-OPENCLAW_CONFIG_PATH = os.path.expanduser("~/.openclaw")
-OPENCLAW_WORKSPACE = os.path.expanduser("~/.openclaw/workspace")
+OPENCLAW_CONFIG_PATH = os.path.expanduser("~/.openmars")
+OPENCLAW_WORKSPACE = os.path.expanduser("~/.openmars/workspace")
 
 
 def get_llm_config() -> Dict[str, Any]:
@@ -193,7 +193,7 @@ def get_lazy_prompt(enable_mcp: bool, mcp_servers: List[str], enable_xcrawl: boo
         tool_prompt += f"""
 【xcrawl全网吞噬技能已激活】
 你现在拥有了重型爬虫能力！如果需要深入了解某个网页的完整内容（比如爆款小说章节、热搜帖子、详细设定），请直接调用：
-`node ~/.openclaw/workspace/skills/xcrawl_scraper/crawl.js <目标URL>`
+`node ~/.openmars/workspace/skills/xcrawl_scraper/crawl.js <目标URL>`
 拿到文本后，立即吸收其核心爽点、套路、设定或语录，无缝融合进你的小说里！
 """
     if enable_undercover:
@@ -283,7 +283,7 @@ def auto_update_plot_record(chapter_content: str, chapter_num: int) -> bool:
             with open(plot_file, "w", encoding="utf-8") as f:
                 f.write("# 剧情备忘录（AI必须严格遵守）\n")
         prompt = f"提取本章核心剧情、新出场人物、新增伏笔、核心人设变化，以列表格式输出，结构化存储，用于后续防吃书。章节内容：{chapter_content[:2000]}..."
-        gen_script_path = get_resource_path("run_openclaw.sh")
+        gen_script_path = get_resource_path("run_openmars.sh")
         result = subprocess.run(
             [gen_script_path, "0", prompt, "100", "default", "false", "false"],
             capture_output=True,

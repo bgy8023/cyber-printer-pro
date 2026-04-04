@@ -19,7 +19,7 @@ class SystemDiagnostic:
             "timestamp": datetime.now().isoformat(),
             "system_info": self.get_system_info(),
             "python_env": self.get_python_env(),
-            "openclaw_status": self.check_openclaw(),
+            "openmars_status": self.check_openmars(),
             "workspace_status": self.check_workspaces(),
             "resource_usage": self.get_resource_usage(),
             "network_status": self.check_network()
@@ -50,7 +50,7 @@ class SystemDiagnostic:
         except:
             return []
 
-    def check_openclaw(self) -> Dict[str, Any]:
+    def check_openmars(self) -> Dict[str, Any]:
         result = {
             "installed": False,
             "path": None,
@@ -61,7 +61,7 @@ class SystemDiagnostic:
 
         try:
             which_result = subprocess.run(
-                ["which", "openclaw"],
+                ["which", "openmars"],
                 capture_output=True,
                 text=True
             )
@@ -71,7 +71,7 @@ class SystemDiagnostic:
 
                 try:
                     version_result = subprocess.run(
-                        ["openclaw", "--version"],
+                        ["openmars", "--version"],
                         capture_output=True,
                         text=True
                     )
@@ -82,14 +82,14 @@ class SystemDiagnostic:
         except:
             pass
 
-        openclaw_config = Path.home() / ".openclaw"
-        result["config_exists"] = openclaw_config.exists()
+        openmars_config = Path.home() / ".openmars"
+        result["config_exists"] = openmars_config.exists()
 
         try:
             for proc in psutil.process_iter(['name', 'cmdline']):
                 try:
                     cmdline = ' '.join(proc.info['cmdline']) if proc.info['cmdline'] else ''
-                    if 'openclaw' in cmdline and 'gateway' in cmdline:
+                    if 'openmars' in cmdline and 'gateway' in cmdline:
                         result["gateway_running"] = True
                         break
                 except:
@@ -201,7 +201,7 @@ class SystemDiagnostic:
         lines.append("")
 
         lines.append("【OpenClaw 状态】")
-        oc = diag['openclaw_status']
+        oc = diag['openmars_status']
         lines.append(f"  已安装: {'✅' if oc['installed'] else '❌'}")
         if oc['path']:
             lines.append(f"  路径: {oc['path']}")
