@@ -19,7 +19,17 @@ state = st.session_state.state
 
 # 应用CSS样式
 from ui.styles import get_css_styles
-st.markdown(get_css_styles(), unsafe_allow_html=True)
+
+if 'dark_mode' not in st.session_state:
+    st.session_state.dark_mode = False
+
+col_theme1, col_theme2 = st.columns([4, 1])
+with col_theme2:
+    if st.button("🌙 切换主题" if not st.session_state.dark_mode else "☀️ 切换主题", type="secondary"):
+        st.session_state.dark_mode = not st.session_state.dark_mode
+        st.rerun()
+
+st.markdown(get_css_styles(st.session_state.dark_mode), unsafe_allow_html=True)
 
 # 渲染页面组件
 from ui.components import (
