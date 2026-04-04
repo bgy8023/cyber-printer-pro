@@ -200,7 +200,7 @@ class SystemDiagnostic:
         lines.append(f"  可执行文件: {diag['python_env']['executable']}")
         lines.append("")
 
-        lines.append("【OpenClaw 状态】")
+        lines.append("【OpenMars 状态】")
         oc = diag['openmars_status']
         lines.append(f"  已安装: {'✅' if oc['installed'] else '❌'}")
         if oc['path']:

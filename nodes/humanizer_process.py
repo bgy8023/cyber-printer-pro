@@ -5,7 +5,7 @@ from typing import Dict, Any
 from nodes.base import BaseNode
 from models.dag import DAGPipeline, NodeStatus
 from utils.logger import Logger
-from utils.helpers import count_real_chars, OPENCLAW_WORKSPACE
+from utils.helpers import count_real_chars, OPENMARS_WORKSPACE
 
 def humanizer_process_node(node_id: str, node_name: str, pipeline: DAGPipeline, context: Dict[str, Any], logger: Logger) -> bool:
     """去AI化处理节点 - 无状态纯函数版本"""
@@ -31,7 +31,7 @@ def humanizer_process_node(node_id: str, node_name: str, pipeline: DAGPipeline, 
             env["APP_BUILTIN_RESOURCES"] = sys._MEIPASS
         
         process = subprocess.Popen(
-            [os.path.join(OPENCLAW_WORKSPACE, "claw"), "chat", prompt, "--agent", target_agent, "--skills", "humanizer"],
+            [os.path.join(OPENMARS_WORKSPACE, "openmars"), "chat", prompt, "--agent", target_agent, "--skills", "humanizer"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

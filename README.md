@@ -85,7 +85,7 @@ MIT License，仅供学习研究使用。
 
 - Claude Code泄露源码
 - DeerFlow 2.0架构理念
-- OpenClaw团队
+- OpenMars团队
 
 ---
 **OpenMars祝您创作愉快！** 🎉

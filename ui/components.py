@@ -70,11 +70,11 @@ def render_daemon_panel(state: StateManager):
                 st.rerun()
     
     with col_daemon2:
-        chapter_num_file = os.path.expanduser("~/OpenClaw_Arch/current_chapter.txt")
+        chapter_num_file = os.path.expanduser("~/OpenMars_Arch/current_chapter.txt")
         if os.path.exists(chapter_num_file):
             with open(chapter_num_file, "r") as f:
                 current_chapter_daemon = f.read().strip()
-            st.info(f"📊 当前守护进程章节号：第{current_chapter_daemon}章 | 日志路径：~/OpenClaw_Arch/kairos_daemon.log")
+            st.info(f"📊 当前守护进程章节号：第{current_chapter_daemon}章 | 日志路径：~/OpenMars_Arch/kairos_daemon.log")
         else:
             st.info("📊 守护进程章节号未初始化，首次生成后自动同步")
 

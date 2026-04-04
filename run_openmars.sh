@@ -29,9 +29,9 @@ fi
 # ================= 【核心修复】自动检测openmars命令 =================
 CLAW_BIN=""
 # 优先从环境变量读取
-if [ -n "$OPENCLAW_CLAW_PATH" ]; then
-  if [ -f "$OPENCLAW_CLAW_PATH" ]; then
-    CLAW_BIN="$OPENCLAW_CLAW_PATH"
+if [ -n "$OPENMARS_CLAW_PATH" ]; then
+  if [ -f "$OPENMARS_CLAW_PATH" ]; then
+    CLAW_BIN="$OPENMARS_CLAW_PATH"
   fi
 fi
 # 从常见位置查找
@@ -57,7 +57,7 @@ fi
 # 最终校验
 if [ -z "$CLAW_BIN" ] || [ ! -f "$CLAW_BIN" ]; then
   echo "❌ 致命错误：未找到openmars命令！"
-  echo "💡 请确认OpenClaw/Claude Code已正确安装，或设置环境变量OPENCLAW_CLAW_PATH指定openmars路径"
+  echo "💡 请确认OpenMars/Claude Code已正确安装，或设置环境变量OPENMARS_CLAW_PATH指定openmars路径"
   exit 1
 fi
 chmod +x "$CLAW_BIN" 2>/dev/null
@@ -66,21 +66,21 @@ echo "✅ 使用openmars命令：$CLAW_BIN"
 # ================= 路径定义 =================
 BUILTIN_SKILLS_DIR="$RESOURCE_DIR/builtin_skills"
 NOVEL_SETTINGS_DIR="$RESOURCE_DIR/novel_settings"
-OPENCLAW_WORKSPACE="$HOME/.openmars/workspace"
+OPENMARS_WORKSPACE="$HOME/.openmars/workspace"
 
 # ================= 前置校验 =================
 # 确保工作区存在
-mkdir -p "$OPENCLAW_WORKSPACE"
-cd "$OPENCLAW_WORKSPACE" || { echo "❌ 无法进入OpenClaw工作区：$OPENCLAW_WORKSPACE"; exit 1; }
+mkdir -p "$OPENMARS_WORKSPACE"
+cd "$OPENMARS_WORKSPACE" || { echo "❌ 无法进入OpenMars工作区：$OPENMARS_WORKSPACE"; exit 1; }
 
 # ================= 内置技能加载 =================
 echo "🔗 正在加载内置技能..."
-mkdir -p "$OPENCLAW_WORKSPACE/skills"
+mkdir -p "$OPENMARS_WORKSPACE/skills"
 for skill_dir in "$BUILTIN_SKILLS_DIR"/*; do
   if [ -d "$skill_dir" ]; then
     skill_name=$(basename "$skill_dir")
-    rm -rf "$OPENCLAW_WORKSPACE/skills/$skill_name"
-    cp -r "$skill_dir" "$OPENCLAW_WORKSPACE/skills/"
+    rm -rf "$OPENMARS_WORKSPACE/skills/$skill_name"
+    cp -r "$skill_dir" "$OPENMARS_WORKSPACE/skills/"
     echo "✅ 已加载内置技能：$skill_name"
   fi
 done
@@ -136,7 +136,7 @@ function safe_openmars_chat() {
         return 1
     fi
     
-    # 清理输出 - 只移除 OpenClaw 开头的日志行
+    # 清理输出 - 只移除 OpenMars 开头的日志行
     # 保留所有其他内容
     
     if [ ! -s "$output_file" ]; then
@@ -225,7 +225,7 @@ if [ "$ENABLE_HUMANIZER" = "true" ]; then
 fi
 
 # ================= 最终文件写入 =================
-OUTPUT_FILE="$OPENCLAW_WORKSPACE/第${CHAPTER_NUM}章_$(date +%Y%m%d%H%M).md"
+OUTPUT_FILE="$OPENMARS_WORKSPACE/第${CHAPTER_NUM}章_$(date +%Y%m%d%H%M).md"
 echo "${FINAL_CONTENT}" > "$OUTPUT_FILE"
 echo "✅ 最终文件已写入：$OUTPUT_FILE"
 

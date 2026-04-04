@@ -23,7 +23,7 @@ class StateManager:
     def load_current_chapter(self):
         """从文件加载当前章节号"""
         import os
-        chapter_num_file = os.path.expanduser("~/OpenClaw_Arch/current_chapter.txt")
+        chapter_num_file = os.path.expanduser("~/OpenMars_Arch/current_chapter.txt")
         if os.path.exists(chapter_num_file):
             try:
                 with open(chapter_num_file, "r") as f:

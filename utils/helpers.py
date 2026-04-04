@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 from typing import Tuple, List, Optional, Dict, Any
 
 # 全局路径变量
-OPENCLAW_CONFIG_PATH = os.path.expanduser("~/.openmars")
-OPENCLAW_WORKSPACE = os.path.expanduser("~/.openmars/workspace")
+OPENMARS_CONFIG_PATH = os.path.expanduser("~/.openmars")
+OPENMARS_WORKSPACE = os.path.expanduser("~/.openmars/workspace")
 
 
 def get_llm_config() -> Dict[str, Any]:
@@ -138,7 +138,7 @@ def get_mcp_servers() -> List[str]:
     """
     try:
         mcp_servers = []
-        mcp_config_file = os.path.join(OPENCLAW_CONFIG_PATH, "mcp_config.json")
+        mcp_config_file = os.path.join(OPENMARS_CONFIG_PATH, "mcp_config.json")
         if os.path.exists(mcp_config_file):
             with open(mcp_config_file, "r", encoding="utf-8") as f:
                 config = json.load(f)

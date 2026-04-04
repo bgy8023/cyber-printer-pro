@@ -14,7 +14,7 @@ def finish_node(node_id: str, node_name: str, pipeline: DAGPipeline, context: Di
         next_chapter = chapter_num + 1
         context["next_chapter"] = next_chapter
         
-        chapter_num_file = os.path.expanduser("~/OpenClaw_Arch/current_chapter.txt")
+        chapter_num_file = os.path.expanduser("~/OpenMars_Arch/current_chapter.txt")
         with open(chapter_num_file, "w") as f:
             f.write(str(next_chapter))
         

@@ -118,7 +118,7 @@ def generate_chapter(...):
 ./build_claw_core.sh
 
 # 手动编译
-cd ~/OpenClaw_Arch_Ultra
+cd ~/OpenMars_Arch_Ultra
 
 # 1. 克隆仓库
 git clone https://github.com/ultraworkers/claw-code.git
