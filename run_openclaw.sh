@@ -70,6 +70,7 @@ OPENCLAW_WORKSPACE="$HOME/.openclaw/workspace"
 
 # ================= 前置校验 =================
 # 确保工作区存在
+mkdir -p "$OPENCLAW_WORKSPACE"
 cd "$OPENCLAW_WORKSPACE" || { echo "❌ 无法进入OpenClaw工作区：$OPENCLAW_WORKSPACE"; exit 1; }
 
 # ================= 内置技能加载 =================
