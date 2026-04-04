@@ -1,7 +1,7 @@
 {
-  "start_chapter": 8,
-  "end_chapter": 9,
-  "target_words": 5000,
+  "start_chapter": 1,
+  "end_chapter": 10,
+  "target_words": 7500,
   "enable_schedule": false,
   "schedule_hour": null,
   "target_agent": "main",

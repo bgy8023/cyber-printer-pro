@@ -160,7 +160,7 @@ class RustCoreDispatcher:
                         content = f.read()
                     
                     # 统计字数
-                    real_chars = ClaudeQueryEngine._count_real_chars(content)
+                    real_chars = self._count_real_chars(content)
                     
                     return {
                         "outline": "",

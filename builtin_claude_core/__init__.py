@@ -2,7 +2,7 @@
 __version__ = "2.3.0"
 
 # 核心推理引擎
-from .query_engine import AsyncQueryEngine, get_session_engine
+from .query_engine import ClaudeQueryEngine, AsyncQueryEngine, get_session_engine
 
 # 记忆系统
 from .memory_palace_simple import SimpleMemoryPalace, get_memory_palace
@@ -38,6 +38,7 @@ from .logger import logger
 
 # 全部导出
 __all__ = [
+    "ClaudeQueryEngine",
     "AsyncQueryEngine",
     "get_session_engine",
     "SimpleMemoryPalace",
