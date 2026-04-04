@@ -1,4 +1,4 @@
-# 🚀 OpenMars - 赛博印钞机 Pro
+# 🚀 OpenMars
 
 基于Claude Code泄露源码的工业级网文自动化创作系统。
 
