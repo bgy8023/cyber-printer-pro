@@ -9,14 +9,23 @@ from .logger import logger
 
 class SimpleMemoryPalace:
     """
-    简化版双层记忆宫殿
+    简化版双层记忆宫殿 - Deer-Flow 2.0 优化版
     L1 固定记忆层：novel_settings/下的全本大纲、人物档案、世界观设定（只读，绝对不允许修改）
     L2 动态记忆层：自动生成的动态剧情记忆.json（原子级读写，跨进程安全）
+    【Deer-Flow 2.0 Token极致压缩】
+    - 只记3轮对话，模仿无状态销毁
+    - 只传结果摘要，不传全量历史
+    - 超阈值自动压缩
     """
     def __init__(self, novel_name: str = "默认小说"):
         self.novel_name = novel_name
         self.base_dir = os.path.join("novel_settings", novel_name)
         os.makedirs(self.base_dir, exist_ok=True)
+        
+        # Deer-Flow 2.0 配置
+        self.max_history_rounds = 3  # 只记3轮，模仿无状态销毁
+        self.compress_threshold = 4000  # 超过4000字符自动压缩
+        self.auto_clean = True  # 静默清理，无冗余日志
         
         # L1 固定记忆（只读）
         self.fixed_memory: Dict[str, str] = {}

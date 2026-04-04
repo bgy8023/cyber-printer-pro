@@ -13,6 +13,11 @@ class ClaudeQueryEngine:
     """
     Claude Code泄露源码原生实现的QueryEngine核心推理引擎
     负责：多智能体调度、结构化记忆管理、上下文压缩、Undercover Mode底层处理
+    【Deer-Flow 2.0 灵魂注入】
+    - 主脑只做调度，绝不亲自下场写网文
+    - 动态上下文拆分，按需分裂子任务
+    - 无状态执行，任务完立即清理
+    - Token极致压缩，只传结果不传废话
     """
     def __init__(self, llm_provider: Optional[str] = None):
         self.memory_store: Dict[str, Any] = {}
@@ -21,9 +26,13 @@ class ClaudeQueryEngine:
         self.max_retry = 3
         self.timeout = 300
         self.llm_provider = llm_provider
+        # Deer-Flow 配置
+        self.deer_flow_enabled = True
+        self.max_history_rounds = 3  # 只记3轮，模仿无状态销毁
+        self.compress_threshold = 4000  # Token压缩阈值
         # 初始化 LLM 适配器
         self._init_llm_adapter()
-        logger.info("✅ Claude QueryEngine 初始化完成")
+        logger.info("✅ Claude QueryEngine 初始化完成（已注入Deer-Flow 2.0灵魂）")
     
     def _init_llm_adapter(self):
         """初始化或重新初始化 LLM 适配器"""
@@ -177,10 +186,15 @@ class ClaudeQueryEngine:
         chapter_name: str = ""
     ) -> Dict[str, Any]:
         """
-        多智能体协调调度（二阶段升级大纲驱动版）
+        多智能体协调调度（二阶段升级大纲驱动版 - 注入Deer-Flow动态调度）
+        【Deer-Flow规则】
+        1. 主脑只做调度，不下场写网文
+        2. 动态上下文拆分，按需分裂子任务
+        3. 无状态执行，任务完立即清理
+        4. Token极致压缩，只传结果不传废话
         支持连贯性校验，不合格自动重写
         """
-        logger.info("🤖 多智能体协调模式已激活（大纲驱动版）")
+        logger.info("🤖 多智能体协调模式已激活（Deer-Flow动态调度版）")
         
         if not hasattr(self, 'llm_adapter') or self.llm_adapter is None:
             logger.info("🔄 LLM 适配器未初始化，正在初始化...")
