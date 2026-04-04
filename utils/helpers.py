@@ -1,3 +1,4 @@
+import streamlit as st
 import os
 import sys
 import re
@@ -5,11 +6,62 @@ import glob
 import json
 import subprocess
 from dotenv import load_dotenv
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Dict, Any
 
 # 全局路径变量
 OPENCLAW_CONFIG_PATH = os.path.expanduser("~/.openclaw")
 OPENCLAW_WORKSPACE = os.path.expanduser("~/.openclaw/workspace")
+
+
+def get_llm_config() -> Dict[str, Any]:
+    """获取LLM配置，支持中转池配置
+    
+    Returns:
+        包含LLM配置的字典
+    """
+    env_path = get_resource_path(".env")
+    if os.path.exists(env_path):
+        load_dotenv(env_path, override=True)
+    
+    # 按优先级获取 API base URL: API_BASE_URL > LLM_BASE_URL > OPENAI_BASE_URL > 默认值
+    base_url = (
+        os.getenv("API_BASE_URL")
+        or os.getenv("LLM_BASE_URL")
+        or os.getenv("OPENAI_BASE_URL")
+        or "https://api.openai.com/v1"
+    )
+    
+    # 按优先级获取 API key: LLM_API_KEY > OPENAI_API_KEY
+    api_key = (
+        os.getenv("LLM_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+        or ""
+    )
+    
+    # 模型名称: LLM_MODEL_NAME > OPENAI_MODEL > 默认值
+    model_name = (
+        os.getenv("LLM_MODEL_NAME")
+        or os.getenv("OPENAI_MODEL")
+        or "gpt-4o"
+    )
+    
+    # 其他配置
+    timeout = int(os.getenv("LLM_TIMEOUT", "300"))
+    temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+    max_tokens = int(os.getenv("LLM_MAX_TOKENS", "16384"))
+    max_retry = int(os.getenv("MAX_RETRY", "3"))
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    
+    return {
+        "provider": provider,
+        "api_key": api_key,
+        "base_url": base_url,
+        "model": model_name,
+        "timeout": timeout,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "max_retry": max_retry
+    }
 
 def get_resource_path(relative_path: str) -> str:
     """获取资源文件路径，兼容开发环境和PyInstaller打包环境
@@ -42,6 +94,7 @@ def reload_env() -> Tuple[str, str, str, str]:
         os.getenv("GITHUB_REPO")
     )
 
+@st.cache_data(ttl=300)
 def get_clawpanel_agents() -> List[str]:
     """获取可用的智能体列表
     
@@ -54,6 +107,7 @@ def get_clawpanel_agents() -> List[str]:
     except Exception:
         return ["main", "main-2"]
 
+@st.cache_data(ttl=300)
 def get_agent_skills(agent_name: str) -> List[str]:
     """从内置技能目录读取技能列表
     
@@ -75,6 +129,7 @@ def get_agent_skills(agent_name: str) -> List[str]:
     except:
         return []
 
+@st.cache_data(ttl=60)
 def get_mcp_servers() -> List[str]:
     """自动检测已配置的MCP Server
     

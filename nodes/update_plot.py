@@ -4,8 +4,29 @@ from models.dag import DAGPipeline, NodeStatus
 from utils.logger import Logger
 from utils.helpers import auto_update_plot_record
 
+def update_plot_node(node_id: str, node_name: str, pipeline: DAGPipeline, context: Dict[str, Any], logger: Logger) -> bool:
+    """剧情记忆更新节点 - 无状态纯函数版本"""
+    pipeline.nodes[node_id].status = NodeStatus.RUNNING
+    
+    try:
+        chapter_content = context.get("final_content", "")
+        chapter_num = context.get("chapter_num", 1)
+        
+        auto_update_plot_record(chapter_content, chapter_num)
+        
+        pipeline.nodes[node_id].status = NodeStatus.SUCCESS
+        logger.write(f"✅ [{node_name}] 剧情记忆更新完成")
+        
+        return True
+        
+    except Exception as e:
+        pipeline.nodes[node_id].status = NodeStatus.FAILED
+        pipeline.nodes[node_id].error_msg = str(e)
+        logger.write(f"❌ [{node_name}] 剧情记忆更新失败：{str(e)}")
+        return False
+
 class UpdatePlotNode(BaseNode):
-    """剧情记忆更新节点"""
+    """剧情记忆更新节点 - 向后兼容包装器"""
     
     def __init__(self):
         super().__init__(
@@ -18,27 +39,4 @@ class UpdatePlotNode(BaseNode):
         return ["humanizer_process"]
     
     def execute(self, pipeline: DAGPipeline, context: Dict[str, Any], logger: Logger) -> bool:
-        """执行剧情记忆更新"""
-        # 更新节点状态
-        pipeline.nodes[self.node_id].status = NodeStatus.RUNNING
-        
-        try:
-            # 获取参数
-            chapter_content = context.get("final_content", "")
-            chapter_num = context.get("chapter_num", 1)
-            
-            # 更新剧情备忘录
-            auto_update_plot_record(chapter_content, chapter_num)
-            
-            # 更新节点状态为成功
-            pipeline.nodes[self.node_id].status = NodeStatus.SUCCESS
-            logger.write(f"✅ [{self.node_name}] 剧情记忆更新完成")
-            
-            return True
-            
-        except Exception as e:
-            # 更新节点状态为失败
-            pipeline.nodes[self.node_id].status = NodeStatus.FAILED
-            pipeline.nodes[self.node_id].error_msg = str(e)
-            logger.write(f"❌ [{self.node_name}] 剧情记忆更新失败：{str(e)}")
-            return False
+        return update_plot_node(self.node_id, self.node_name, pipeline, context, logger)

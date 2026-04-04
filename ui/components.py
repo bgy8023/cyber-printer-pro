@@ -1,21 +1,47 @@
 import streamlit as st
 import subprocess
 import os
-from typing import Dict, Any, Optional
-from models.dag import DAGPipeline
+import hashlib
+from typing import Dict, Any, Optional, List
+from models.dag import DAGPipeline, DAGNode, NodeStatus
 from state.manager import StateManager
 from utils.helpers import get_resource_path, check_daemon_status, get_clawpanel_agents, get_agent_skills
+
+def _get_node_state_hash(node: DAGNode) -> str:
+    """计算节点状态的哈希值，用于判断是否需要更新
+    
+    Args:
+        node: DAG节点
+        
+    Returns:
+        状态哈希值
+    """
+    state_str = f"{node.node_id}:{node.status.value}:{node.start_time}:{node.end_time}"
+    return hashlib.md5(state_str.encode()).hexdigest()
+
+def _get_pipeline_state_hash(pipeline: DAGPipeline) -> str:
+    """计算整个管线状态的哈希值
+    
+    Args:
+        pipeline: DAG管线
+        
+    Returns:
+        管线状态哈希值
+    """
+    hashes = [_get_node_state_hash(node) for node in pipeline.nodes.values()]
+    return hashlib.md5("".join(hashes).encode()).hexdigest()
 
 def render_header():
     """渲染页面头部"""
     st.title("🌌 赛博印钞机 Pro Mac版")
-    st.markdown("""
-<span class='status-badge'>✅ 内置技能物理内聚合并</span>
-<span class='status-badge'>✅ Claude官方内核级Undercover Mode</span>
-<span class='status-badge'>✅ 多智能体网文工作室</span>
-<span class='status-badge'>✅ Kairos自主守护进程</span>
-<span class='status-badge'>🛡️ 企业级DAG事务保障</span>
-""", unsafe_allow_html=True)
+    status_badges = (
+        "<span class='status-badge'>✅ 内置技能物理内聚合并</span>"
+        "<span class='status-badge'>✅ Claude官方内核级Undercover Mode</span>"
+        "<span class='status-badge'>✅ 多智能体网文工作室</span>"
+        "<span class='status-badge'>✅ Kairos自主守护进程</span>"
+        "<span class='status-badge'>🛡️ 企业级DAG事务保障</span>"
+    )
+    st.markdown(status_badges, unsafe_allow_html=True)
 
 def render_daemon_panel(state: StateManager):
     """渲染守护进程控制面板
@@ -46,28 +72,42 @@ def render_daemon_panel(state: StateManager):
     with col_daemon2:
         chapter_num_file = os.path.expanduser("~/OpenClaw_Arch/current_chapter.txt")
         if os.path.exists(chapter_num_file):
-            current_chapter_daemon = open(chapter_num_file, "r").read().strip()
+            with open(chapter_num_file, "r") as f:
+                current_chapter_daemon = f.read().strip()
             st.info(f"📊 当前守护进程章节号：第{current_chapter_daemon}章 | 日志路径：~/OpenClaw_Arch/kairos_daemon.log")
         else:
             st.info("📊 守护进程章节号未初始化，首次生成后自动同步")
 
-def render_dag_nodes(pipeline: DAGPipeline, placeholders: Dict):
-    """渲染DAG节点状态
+def render_dag_nodes(pipeline: DAGPipeline, placeholders: Dict, previous_hash: Optional[str] = None) -> Optional[str]:
+    """渲染DAG节点状态，按需更新
     
     Args:
         pipeline: DAG管线
         placeholders: UI占位符字典
+        previous_hash: 上次渲染的管线状态哈希值
+        
+    Returns:
+        当前管线状态哈希值
     """
+    current_hash = _get_pipeline_state_hash(pipeline)
+    
+    if previous_hash == current_hash:
+        return current_hash
+    
     node_list = list(pipeline.nodes.values())
     for i, (node_id, placeholder) in enumerate(placeholders.items()):
-        node = node_list[i]
-        with placeholder:
-            st.markdown(f"""
-            <div class="node-card {node.status.value}">
-                <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 0.5em;">{node.node_name}</div>
-                <div style="font-size: 0.9em; color: #64748b;">{node.description}</div>
-            </div>
-            """, unsafe_allow_html=True)
+        if i < len(node_list):
+            node = node_list[i]
+            with placeholder:
+                node_html = f"""
+                <div class="node-card {node.status.value}">
+                    <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 0.5em;">{node.node_name}</div>
+                    <div style="font-size: 0.9em; color: #64748b;">{node.description}</div>
+                </div>
+                """
+                st.markdown(node_html, unsafe_allow_html=True)
+    
+    return current_hash
 
 def render_main_panel(state: StateManager):
     """渲染核心操作区
@@ -157,11 +197,11 @@ def render_tabs(state: StateManager, log_placeholder):
     with tab_log:
         with log_placeholder:
             if state.log_display:
-                st.code("\n".join(state.log_display), language="bash")
+                _render_paginated_logs(state.log_display)
             elif os.path.exists(get_resource_path("system.log")):
                 with open(get_resource_path("system.log"), "r", encoding="utf-8") as f:
-                    lines = f.readlines()[-25:]
-                    st.code("".join(lines), language="bash")
+                    lines = f.readlines()[-100:]
+                _render_paginated_logs(lines)
             else:
                 st.info("系统待命中，点击一键生成按钮启动...")
 
@@ -172,3 +212,29 @@ def render_tabs(state: StateManager, log_placeholder):
             st.markdown(state.preview_content)
         else:
             st.info("暂无最新生成的文章，请先点击一键生成按钮...")
+
+def _render_paginated_logs(log_lines: List[str], page_size: int = 25):
+    """渲染分页日志
+    
+    Args:
+        log_lines: 日志行列表
+        page_size: 每页显示的日志行数
+    """
+    if not log_lines:
+        return
+    
+    total_lines = len(log_lines)
+    total_pages = (total_lines + page_size - 1) // page_size
+    
+    if total_pages > 1:
+        page_num = st.slider("选择日志页", min_value=1, max_value=total_pages, value=total_pages)
+    else:
+        page_num = 1
+    
+    start_idx = (page_num - 1) * page_size
+    end_idx = min(start_idx + page_size, total_lines)
+    
+    st.code("".join(log_lines[start_idx:end_idx]), language="bash")
+    
+    if total_pages > 1:
+        st.caption(f"显示日志 {start_idx + 1}-{end_idx}，共 {total_lines} 条")

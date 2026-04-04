@@ -8,8 +8,67 @@ from nodes.base import BaseNode
 from models.dag import DAGPipeline, NodeStatus
 from utils.logger import Logger
 
+def github_archive_node(node_id: str, node_name: str, pipeline: DAGPipeline, context: Dict[str, Any], logger: Logger) -> bool:
+    """GitHub母本归档节点 - 无状态纯函数版本"""
+    pipeline.nodes[node_id].status = NodeStatus.RUNNING
+    logger.write(f"📦 [{node_name}] 开始GitHub母本归档")
+    
+    try:
+        chapter_title = context.get("chapter_title", "")
+        content = context.get("final_content", "")
+        github_token = context.get("github_token", "")
+        github_repo = context.get("github_repo", "")
+        
+        filename = f"{chapter_title}_{datetime.now().strftime('%Y%m%d%H%M')}.md"
+        
+        url = f"https://api.github.com/repos/{github_repo}/contents/novels/{filename}"
+        content_base64 = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+        headers = {"Authorization": f"token {github_token}"}
+        data = {"message": f"Auto-upload: {filename}", "content": content_base64, "branch": "main"}
+        
+        res = None
+        for i in range(2):
+            try:
+                res = requests.put(url, headers=headers, json=data)
+                if res.status_code in [200, 201]:
+                    break
+                else:
+                    if i == 0:
+                        logger.write(f"⚠️ [{node_name}] GitHub上传失败，正在重试...")
+                        time.sleep(1)
+                    else:
+                        raise Exception(f"GitHub上传失败：{res.text}")
+            except Exception as e:
+                if i == 0:
+                    logger.write(f"⚠️ [{node_name}] GitHub上传异常，正在重试...")
+                    time.sleep(1)
+                else:
+                    raise Exception(f"GitHub上传异常：{str(e)}")
+        
+        raw_url = f"https://raw.githubusercontent.com/{github_repo}/main/novels/{filename}"
+        
+        md5 = hashlib.md5(content.encode()).hexdigest()
+        
+        context["github_url"] = raw_url
+        context["md5"] = md5
+        context["github_file"] = f"novels/{filename}"
+        if res and res.status_code in [200, 201]:
+            context["github_sha"] = res.json()["content"]["sha"]
+        
+        pipeline.nodes[node_id].status = NodeStatus.SUCCESS
+        pipeline.nodes[node_id].result = {"raw_url": raw_url, "md5": md5}
+        logger.write(f"✅ [{node_name}] GitHub归档成功：{filename}")
+        
+        return True
+        
+    except Exception as e:
+        pipeline.nodes[node_id].status = NodeStatus.FAILED
+        pipeline.nodes[node_id].error_msg = str(e)
+        logger.write(f"❌ [{node_name}] GitHub归档失败：{str(e)}")
+        return False
+
 class GitHubArchiveNode(BaseNode):
-    """GitHub母本归档节点"""
+    """GitHub母本归档节点 - 向后兼容包装器"""
     
     def __init__(self):
         super().__init__(
@@ -22,69 +81,4 @@ class GitHubArchiveNode(BaseNode):
         return ["update_plot"]
     
     def execute(self, pipeline: DAGPipeline, context: Dict[str, Any], logger: Logger) -> bool:
-        """执行GitHub归档"""
-        # 更新节点状态
-        pipeline.nodes[self.node_id].status = NodeStatus.RUNNING
-        logger.write(f"📦 [{self.node_name}] 开始GitHub母本归档")
-        
-        try:
-            # 获取参数
-            chapter_title = context.get("chapter_title", "")
-            content = context.get("final_content", "")
-            github_token = context.get("github_token", "")
-            github_repo = context.get("github_repo", "")
-            
-            # 生成文件名
-            filename = f"{chapter_title}_{datetime.now().strftime('%Y%m%d%H%M')}.md"
-            
-            # 准备GitHub API请求
-            url = f"https://api.github.com/repos/{github_repo}/contents/novels/{filename}"
-            content_base64 = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-            headers = {"Authorization": f"token {github_token}"}
-            data = {"message": f"Auto-upload: {filename}", "content": content_base64, "branch": "main"}
-            
-            # 尝试上传
-            for i in range(2):
-                try:
-                    res = requests.put(url, headers=headers, json=data)
-                    if res.status_code in [200, 201]:
-                        break
-                    else:
-                        if i == 0:
-                            logger.write(f"⚠️ [{self.node_name}] GitHub上传失败，正在重试...")
-                            time.sleep(1)
-                        else:
-                            raise Exception(f"GitHub上传失败：{res.text}")
-                except Exception as e:
-                    if i == 0:
-                        logger.write(f"⚠️ [{self.node_name}] GitHub上传异常，正在重试...")
-                        time.sleep(1)
-                    else:
-                        raise Exception(f"GitHub上传异常：{str(e)}")
-            
-            # 生成原始文件URL
-            raw_url = f"https://raw.githubusercontent.com/{github_repo}/main/novels/{filename}"
-            
-            # 计算MD5校验值
-            md5 = hashlib.md5(content.encode()).hexdigest()
-            
-            # 保存到上下文
-            context["github_url"] = raw_url
-            context["md5"] = md5
-            context["github_file"] = f"novels/{filename}"
-            if res.status_code in [200, 201]:
-                context["github_sha"] = res.json()["content"]["sha"]
-            
-            # 更新节点状态为成功
-            pipeline.nodes[self.node_id].status = NodeStatus.SUCCESS
-            pipeline.nodes[self.node_id].result = {"raw_url": raw_url, "md5": md5}
-            logger.write(f"✅ [{self.node_name}] GitHub归档成功：{filename}")
-            
-            return True
-            
-        except Exception as e:
-            # 更新节点状态为失败
-            pipeline.nodes[self.node_id].status = NodeStatus.FAILED
-            pipeline.nodes[self.node_id].error_msg = str(e)
-            logger.write(f"❌ [{self.node_name}] GitHub归档失败：{str(e)}")
-            return False
+        return github_archive_node(self.node_id, self.node_name, pipeline, context, logger)
