@@ -279,7 +279,6 @@ def render_tabs(state: StateManager, log_placeholder):
             st.info("⚠️ 记忆宫殿空空如也，请重新运行部署脚本！")
 
     with tab_log:
-        import streamlit as st
         logs = st.session_state.get("log_display", []) or state.log_display
         col_refresh, col_info = st.columns([1, 4])
         with col_refresh:
