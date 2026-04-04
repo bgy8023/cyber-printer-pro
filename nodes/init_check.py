@@ -14,10 +14,6 @@ def init_check_node(node_id: str, node_name: str, pipeline: DAGPipeline, context
     
     try:
         notion_token, notion_db_id, github_token, github_repo = reload_env()
-        required_env = [notion_token, notion_db_id, github_token, github_repo]
-        
-        if any(not env for env in required_env):
-            raise Exception("核心环境变量缺失，请检查.env文件")
         
         gen_script_path = get_resource_path("run_openclaw.sh")
         if not gen_script_path or not os.path.exists(gen_script_path):
@@ -42,36 +38,49 @@ def init_check_node(node_id: str, node_name: str, pipeline: DAGPipeline, context
             if mcp_servers:
                 logger.write(f"✅ [{node_name}] MCP跨维工具已就绪：{', '.join(mcp_servers)}")
         
-        for i in range(2):
+        # GitHub API 检查（可选）
+        if github_token and github_repo:
             try:
-                gh_res = requests.get(
-                    f"https://api.github.com/repos/{github_repo}",
-                    headers={"Authorization": f"token {github_token}"}
-                )
-                if gh_res.status_code == 200:
-                    break
-                else:
-                    if i == 0:
-                        logger.write(f"⚠️ [{node_name}] GitHub API连通失败，正在重试...")
-                        time.sleep(1)
-                    else:
-                        raise Exception(f"GitHub API连通失败：{gh_res.text}")
-            except Exception as e:
-                if i == 0:
-                    logger.write(f"⚠️ [{node_name}] GitHub API请求异常，正在重试...")
-                    time.sleep(1)
-                else:
-                    raise Exception(f"GitHub API请求异常：{str(e)}")
+                for i in range(2):
+                    try:
+                        gh_res = requests.get(
+                            f"https://api.github.com/repos/{github_repo}",
+                            headers={"Authorization": f"token {github_token}"}
+                        )
+                        if gh_res.status_code == 200:
+                            logger.write(f"✅ [{node_name}] GitHub API连通成功")
+                            break
+                        else:
+                            if i == 0:
+                                logger.write(f"⚠️ [{node_name}] GitHub API连通失败，正在重试...")
+                                time.sleep(1)
+                            else:
+                                logger.write(f"⚠️ [{node_name}] GitHub API连通失败，跳过检查")
+                    except Exception as e:
+                        if i == 0:
+                            logger.write(f"⚠️ [{node_name}] GitHub API请求异常，正在重试...")
+                            time.sleep(1)
+                        else:
+                            logger.write(f"⚠️ [{node_name}] GitHub API请求异常，跳过检查")
+            except:
+                logger.write(f"⚠️ [{node_name}] GitHub API检查跳过")
         
-        notion_res = requests.get(
-            f"https://api.notion.com/v1/databases/{notion_db_id}",
-            headers={
-                "Authorization": f"Bearer {notion_token}",
-                "Notion-Version": "2022-06-28"
-            }
-        )
-        if notion_res.status_code != 200:
-            raise Exception(f"Notion API连通失败：{notion_res.text}")
+        # Notion API 检查（可选）
+        if notion_token and notion_db_id:
+            try:
+                notion_res = requests.get(
+                    f"https://api.notion.com/v1/databases/{notion_db_id}",
+                    headers={
+                        "Authorization": f"Bearer {notion_token}",
+                        "Notion-Version": "2022-06-28"
+                    }
+                )
+                if notion_res.status_code == 200:
+                    logger.write(f"✅ [{node_name}] Notion API连通成功")
+                else:
+                    logger.write(f"⚠️ [{node_name}] Notion API连通失败，跳过检查")
+            except:
+                logger.write(f"⚠️ [{node_name}] Notion API检查跳过")
         
         setting_path = get_resource_path("novel_settings")
         if not os.path.exists(setting_path):
