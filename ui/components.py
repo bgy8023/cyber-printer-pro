@@ -279,15 +279,29 @@ def render_tabs(state: StateManager, log_placeholder):
             st.info("⚠️ 记忆宫殿空空如也，请重新运行部署脚本！")
 
     with tab_log:
-        with log_placeholder:
-            if state.log_display:
-                _render_paginated_logs(state.log_display)
-            elif os.path.exists(get_resource_path("system.log")):
-                with open(get_resource_path("system.log"), "r", encoding="utf-8") as f:
-                    lines = f.readlines()[-100:]
-                _render_paginated_logs(lines)
+        import streamlit as st
+        logs = st.session_state.get("log_display", []) or state.log_display
+        col_refresh, col_info = st.columns([1, 4])
+        with col_refresh:
+            if st.button("🔄 刷新日志", key="refresh_log_btn"):
+                st.rerun()
+        with col_info:
+            if logs:
+                st.info(f"📊 显示日志 {len(logs)} 条，共 {len(logs)} 条")
             else:
                 st.info("系统待命中，点击一键生成按钮启动...")
+        
+        if logs:
+            _render_paginated_logs(logs)
+        elif os.path.exists(get_resource_path("system.log")):
+            with open(get_resource_path("system.log"), "r", encoding="utf-8") as f:
+                lines = f.readlines()[-100:]
+            if lines:
+                _render_paginated_logs(lines)
+            else:
+                st.info("📭 暂无日志记录")
+        else:
+            st.info("📭 系统待命中，点击一键生成按钮启动...")
 
     with tab_preview:
         st.subheader("刚生成的章节预览（内置技能+Undercover模式）")

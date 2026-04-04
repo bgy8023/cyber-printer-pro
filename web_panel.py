@@ -129,10 +129,11 @@ if lazy_btn:
     
     # 定义UI回调
     def update_logs(log_text):
-        st.session_state.log_display = log_text.split("\n")
+        logs = log_text.split("\n")
+        st.session_state.log_display = logs
+        state.log_display = logs
         with log_placeholder:
-            st.code("\n".join(st.session_state.log_display), language="bash")
-        # 更新DAG节点UI
+            st.code("\n".join(logs), language="bash")
         render_dag_nodes(state.pipeline, node_placeholders)
     
     # 执行DAG管线
