@@ -84,3 +84,8 @@ novel_settings/custom_models.json
 # 临时文件
 *.tmp
 *.temp
+
+# 备份文件
+*_bak_*.py
+*_bak_*.command
+*_backup.*
