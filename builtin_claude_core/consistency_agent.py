@@ -95,7 +95,7 @@ class ConsistencyAgent:
             )
             check_result = resp.choices[0].message.content.strip()
         except Exception as e:
-            logger.error(f"❌ 校验调用失败：{str(e)}", exc_info=True)
+            logger.error("❌ 校验调用失败：{}".format(str(e)), exc_info=True)
             result.passed = True
             result.rewrite_needed = False
             result.score = 80
