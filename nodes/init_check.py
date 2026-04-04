@@ -19,7 +19,7 @@ def init_check_node(node_id: str, node_name: str, pipeline: DAGPipeline, context
         if any(not env for env in required_env):
             raise Exception("核心环境变量缺失，请检查.env文件")
         
-        gen_script_path = get_resource_path("run_claude_core.sh")
+        gen_script_path = get_resource_path("run_openclaw.sh")
         if not gen_script_path or not os.path.exists(gen_script_path):
             raise Exception(f"生成脚本不存在：{gen_script_path}")
         

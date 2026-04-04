@@ -283,7 +283,7 @@ def auto_update_plot_record(chapter_content: str, chapter_num: int) -> bool:
             with open(plot_file, "w", encoding="utf-8") as f:
                 f.write("# 剧情备忘录（AI必须严格遵守）\n")
         prompt = f"提取本章核心剧情、新出场人物、新增伏笔、核心人设变化，以列表格式输出，结构化存储，用于后续防吃书。章节内容：{chapter_content[:2000]}..."
-        gen_script_path = get_resource_path("run_claude_core.sh")
+        gen_script_path = get_resource_path("run_openclaw.sh")
         result = subprocess.run(
             [gen_script_path, "0", prompt, "100", "default", "false", "false"],
             capture_output=True,
