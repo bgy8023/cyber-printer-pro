@@ -15,7 +15,7 @@ class MemoryPalace:
     动态记忆：已生成章节内容、已埋设伏笔、剧情节点（自动更新）
     """
     
-    def __init__(self, memory_dir: Optional[str] = None):
+    def __init__(self, memory_dir: Optional[str] = None, load_dynamic: bool = True):
         # 固定记忆（不可变）
         self.fixed_memory: Dict[str, Any] = {
             "characters": {},      # 人物档案
@@ -34,24 +34,35 @@ class MemoryPalace:
         
         self.memory_dir = memory_dir
         if memory_dir:
-            self._init_memory_dir(memory_dir)
+            self._init_memory_dir(memory_dir, load_dynamic=load_dynamic)
         
         logger.info("✅ 双层记忆宫殿系统初始化完成")
     
-    def _init_memory_dir(self, memory_dir: str):
-        """初始化记忆目录"""
+    def _init_memory_dir(self, memory_dir: str, load_dynamic: bool = True):
+        """初始化记忆目录
+        
+        Args:
+            memory_dir: 记忆目录路径
+            load_dynamic: 是否加载动态记忆（默认True，设为False可实现无状态初始化
+        """
         if not os.path.exists(memory_dir):
             os.makedirs(memory_dir, exist_ok=True)
             logger.info(f"📂 创建记忆目录：{memory_dir}")
         
         # 尝试加载已保存的记忆
-        self.load_from_disk()
+        self.load_from_disk(load_dynamic=load_dynamic)
     
-    def bind_novel(self, novel_name: str, base_dir: str = "./novels"):
-        """绑定小说，创建独立的记忆空间"""
+    def bind_novel(self, novel_name: str, base_dir: str = "./novels", load_dynamic: bool = True):
+        """绑定小说，创建独立的记忆空间
+        
+        Args:
+            novel_name: 小说名称
+            base_dir: 基础目录
+            load_dynamic: 是否加载动态记忆（默认True，设为False可实现无状态绑定
+        """
         novel_dir = os.path.join(base_dir, novel_name)
         self.memory_dir = novel_dir
-        self._init_memory_dir(novel_dir)
+        self._init_memory_dir(novel_dir, load_dynamic=load_dynamic)
         logger.info(f"📚 绑定小说：{novel_name}，记忆目录：{novel_dir}")
     
     # ========== 固定记忆管理 ==========
@@ -262,6 +273,38 @@ class MemoryPalace:
         elif "大纲" in filename:
             self.set_full_outline(content)
     
+    # ========== 临时记忆清理 ==========
+    
+    def clear_dynamic_memory(self):
+        """清理临时剧情记忆（动态记忆），保留固定设定"""
+        self.dynamic_memory = {
+            "chapters": {},
+            "foreshadowing": [],
+            "plot_nodes": [],
+            "current_chapter": 0
+        }
+        logger.info("🧹 已清理临时剧情记忆")
+    
+    def clear_temp_files(self):
+        """清理磁盘上的动态记忆文件，保留固定记忆文件"""
+        if not self.memory_dir:
+            return
+        
+        dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
+        if os.path.exists(dynamic_path):
+            try:
+                os.remove(dynamic_path)
+                logger.info(f"🗑️ 已删除动态记忆文件：{dynamic_path}")
+            except Exception as e:
+                logger.error(f"❌ 删除动态记忆文件失败：{str(e)}")
+    
+    def reset_session(self):
+        """任务结束后重置会话：清理内存中的动态记忆 + 磁盘上的动态记忆文件"""
+        logger.info("🔄 开始会话重置...")
+        self.clear_dynamic_memory()
+        self.clear_temp_files()
+        logger.info("✅ 会话重置完成，保留了固定设定")
+    
     # ========== 持久化 ==========
     
     def save_to_disk(self):
@@ -272,20 +315,27 @@ class MemoryPalace:
         
         os.makedirs(self.memory_dir, exist_ok=True)
         
-        # 保存固定记忆
+        # 保存固定记忆（始终保存）
         fixed_path = os.path.join(self.memory_dir, "fixed_memory.json")
         with open(fixed_path, "w", encoding="utf-8") as f:
             json.dump(self.fixed_memory, f, ensure_ascii=False, indent=2)
+        logger.info("✅ 固定记忆已保存")
         
-        # 保存动态记忆
-        dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
-        with open(dynamic_path, "w", encoding="utf-8") as f:
-            json.dump(self.dynamic_memory, f, ensure_ascii=False, indent=2)
-        
-        logger.info(f"✅ 记忆已保存到：{self.memory_dir}")
+        # 保存动态记忆（仅当有内容时）
+        if self.dynamic_memory["chapters"] or self.dynamic_memory["foreshadowing"] or self.dynamic_memory["plot_nodes"]:
+            dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
+            with open(dynamic_path, "w", encoding="utf-8") as f:
+                json.dump(self.dynamic_memory, f, ensure_ascii=False, indent=2)
+            logger.info("✅ 动态记忆已保存")
+        else:
+            self.clear_temp_files()
     
-    def load_from_disk(self):
-        """从磁盘加载记忆"""
+    def load_from_disk(self, load_dynamic: bool = True):
+        """从磁盘加载记忆
+        
+        Args:
+            load_dynamic: 是否加载动态记忆（默认True，设为False可实现无状态启动）
+        """
         if not self.memory_dir:
             return
         
@@ -312,24 +362,27 @@ class MemoryPalace:
                 # 回退到原始状态
                 self.fixed_memory = original_fixed_memory
         
-        # 加载动态记忆
-        dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
-        if os.path.exists(dynamic_path):
-            try:
-                with open(dynamic_path, "r", encoding="utf-8") as f:
-                    loaded_memory = json.load(f)
-                # 验证加载的数据结构
-                if isinstance(loaded_memory, dict) and all(key in loaded_memory for key in ["chapters", "foreshadowing", "plot_nodes", "current_chapter"]):
-                    self.dynamic_memory = loaded_memory
-                    logger.info("✅ 动态记忆已加载")
-                else:
-                    logger.error("❌ 动态记忆数据结构错误，使用默认值")
+        # 加载动态记忆（可选）
+        if load_dynamic:
+            dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
+            if os.path.exists(dynamic_path):
+                try:
+                    with open(dynamic_path, "r", encoding="utf-8") as f:
+                        loaded_memory = json.load(f)
+                    # 验证加载的数据结构
+                    if isinstance(loaded_memory, dict) and all(key in loaded_memory for key in ["chapters", "foreshadowing", "plot_nodes", "current_chapter"]):
+                        self.dynamic_memory = loaded_memory
+                        logger.info("✅ 动态记忆已加载")
+                    else:
+                        logger.error("❌ 动态记忆数据结构错误，使用默认值")
+                        # 回退到原始状态
+                        self.dynamic_memory = original_dynamic_memory
+                except Exception as e:
+                    logger.error(f"❌ 加载动态记忆失败：{str(e)}")
                     # 回退到原始状态
                     self.dynamic_memory = original_dynamic_memory
-            except Exception as e:
-                logger.error(f"❌ 加载动态记忆失败：{str(e)}")
-                # 回退到原始状态
-                self.dynamic_memory = original_dynamic_memory
+        else:
+            logger.info("⏭️ 跳过动态记忆加载，保持无状态")
     
     def _auto_summarize(self, content: str, max_length: int = 500) -> str:
         """自动生成章节摘要（改进版本）"""
@@ -380,13 +433,41 @@ class MemoryPalace:
 _memory_palace: Optional[MemoryPalace] = None
 
 
-def get_memory_palace(memory_dir: Optional[str] = None) -> MemoryPalace:
-    """获取记忆宫殿单例"""
+def get_memory_palace(memory_dir: Optional[str] = None, load_dynamic: bool = True) -> MemoryPalace:
+    """获取记忆宫殿单例
+    
+    Args:
+        memory_dir: 记忆目录路径
+        load_dynamic: 是否加载动态记忆（默认True，设为False可实现无状态启动
+    """
     global _memory_palace
     if _memory_palace is None:
         _memory_palace = MemoryPalace(memory_dir)
     elif memory_dir is not None and _memory_palace.memory_dir != memory_dir:
         # 如果提供了新的 memory_dir 且与当前不同，更新单例
+        logger.info(f"🔄 切换记忆目录，清理旧的临时记忆")
+        _memory_palace.clear_dynamic_memory()
         _memory_palace.memory_dir = memory_dir
         _memory_palace._init_memory_dir(memory_dir)
+        # 如果需要无状态，重新加载
+        if not load_dynamic:
+            _memory_palace.clear_dynamic_memory()
+            _memory_palace.clear_temp_files()
     return _memory_palace
+
+
+def reset_memory_palace():
+    """重置记忆宫殿单例，清理所有临时记忆，保留固定设定"""
+    global _memory_palace
+    if _memory_palace is not None:
+        _memory_palace.reset_session()
+    return _memory_palace
+
+
+def destroy_memory_palace():
+    """销毁记忆宫殿单例，完全重置（慎用）"""
+    global _memory_palace
+    if _memory_palace is not None:
+        _memory_palace.reset_session()
+        _memory_palace = None
+    logger.info("🗑️ 记忆宫殿已销毁")

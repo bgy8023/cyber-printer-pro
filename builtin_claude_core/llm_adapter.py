@@ -85,8 +85,9 @@ class OpenAIProvider(BaseLLMProvider):
 class AnthropicProvider(BaseLLMProvider):
     """Anthropic Claude API 提供者"""
     
-    def __init__(self, api_key: str, model: str = "claude-3-sonnet-20240229"):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, model: str = "claude-3-sonnet-20240229"):
         self.api_key = api_key
+        self.base_url = base_url or "https://api.anthropic.com"
         self.model = model
         self._client = None
     
@@ -94,7 +95,7 @@ class AnthropicProvider(BaseLLMProvider):
         if self._client is None:
             try:
                 from anthropic import Anthropic
-                self._client = Anthropic(api_key=self.api_key)
+                self._client = Anthropic(api_key=self.api_key, base_url=self.base_url)
             except ImportError:
                 logger.error("❌ 未安装 anthropic 包，请运行: pip install anthropic")
                 raise
@@ -208,6 +209,15 @@ class LLMAdapter:
     """
     统一 LLM 适配器
     根据配置自动选择合适的 LLM 提供者
+    
+    环境变量配置优先级（从高到低）：
+    - API_BASE_URL > LLM_BASE_URL > 提供者特定的 BASE_URL > 默认值
+    - LLM_API_KEY > 提供者特定的 API_KEY
+    - LLM_MODEL_NAME > 提供者特定的 MODEL
+    
+    支持通过 .env 配置切换中转池：
+    - 设置 API_BASE_URL 为你的中转池地址即可
+    - 例如：API_BASE_URL=https://api.你的中转池.com/v1
     """
     
     PROVIDERS = {
@@ -240,28 +250,43 @@ class LLMAdapter:
         
         # 根据提供者类型自动读取环境变量
         if provider_type == "openai":
-            api_key = kwargs.get("api_key") or os.getenv("OPENAI_API_KEY")
+            # 按优先级获取 API key: kwargs > LLM_API_KEY > OPENAI_API_KEY
+            api_key = kwargs.get("api_key") or os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError("使用 OpenAI 需要提供 api_key 或设置 OPENAI_API_KEY 环境变量")
+                raise ValueError("使用 OpenAI 需要提供 api_key 或设置 LLM_API_KEY/OPENAI_API_KEY 环境变量")
+            # 按优先级获取 base_url: kwargs > API_BASE_URL > LLM_BASE_URL > OPENAI_BASE_URL > 默认值
+            base_url = kwargs.get("base_url") or os.getenv("API_BASE_URL") or os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+            # 按优先级获取 model: kwargs > LLM_MODEL_NAME > OPENAI_MODEL
+            model = kwargs.get("model") or os.getenv("LLM_MODEL_NAME") or os.getenv("OPENAI_MODEL", "gpt-4")
             return OpenAIProvider(
                 api_key=api_key,
-                base_url=kwargs.get("base_url") or os.getenv("OPENAI_BASE_URL"),
-                model=kwargs.get("model") or os.getenv("LLM_MODEL_NAME") or os.getenv("OPENAI_MODEL", "gpt-4")
+                base_url=base_url,
+                model=model
             )
         
         elif provider_type == "anthropic":
-            api_key = kwargs.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
+            # 按优先级获取 API key: kwargs > LLM_API_KEY > ANTHROPIC_API_KEY
+            api_key = kwargs.get("api_key") or os.getenv("LLM_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
             if not api_key:
-                raise ValueError("使用 Anthropic 需要提供 api_key 或设置 ANTHROPIC_API_KEY 环境变量")
+                raise ValueError("使用 Anthropic 需要提供 api_key 或设置 LLM_API_KEY/ANTHROPIC_API_KEY 环境变量")
+            # 按优先级获取 base_url: kwargs > API_BASE_URL > LLM_BASE_URL > ANTHROPIC_BASE_URL > 默认值
+            base_url = kwargs.get("base_url") or os.getenv("API_BASE_URL") or os.getenv("LLM_BASE_URL") or os.getenv("ANTHROPIC_BASE_URL")
+            # 按优先级获取 model: kwargs > LLM_MODEL_NAME > ANTHROPIC_MODEL
+            model = kwargs.get("model") or os.getenv("LLM_MODEL_NAME") or os.getenv("ANTHROPIC_MODEL", "claude-3-sonnet-20240229")
             return AnthropicProvider(
                 api_key=api_key,
-                model=kwargs.get("model") or os.getenv("LLM_MODEL_NAME") or os.getenv("ANTHROPIC_MODEL", "claude-3-sonnet-20240229")
+                base_url=base_url,
+                model=model
             )
         
         elif provider_type == "ollama":
+            # 按优先级获取 base_url: kwargs > API_BASE_URL > LLM_BASE_URL > OLLAMA_BASE_URL > 默认值
+            base_url = kwargs.get("base_url") or os.getenv("API_BASE_URL") or os.getenv("LLM_BASE_URL") or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            # 按优先级获取 model: kwargs > LLM_MODEL_NAME > OLLAMA_MODEL
+            model = kwargs.get("model") or os.getenv("LLM_MODEL_NAME") or os.getenv("OLLAMA_MODEL", "llama2")
             return OllamaProvider(
-                base_url=kwargs.get("base_url") or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-                model=kwargs.get("model") or os.getenv("LLM_MODEL_NAME") or os.getenv("OLLAMA_MODEL", "llama2")
+                base_url=base_url,
+                model=model
             )
         
         else:
