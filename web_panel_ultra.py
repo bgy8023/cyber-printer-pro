@@ -1037,33 +1037,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown("---")
 
-# Kairos守护进程控制面板
+# Kairos守护进程控制面板（暂时禁用）
 st.subheader("⏰ Kairos自主守护进程（自动日更，彻底解放双手）")
-daemon_status = check_daemon_status()
-col_daemon1, col_daemon2 = st.columns([1, 3])
-with col_daemon1:
-    if daemon_status:
-        st.success("✅ 守护进程运行中")
-        if st.button("🛑 停止守护进程", type="secondary"):
-            subprocess.run(["pkill", "-f", "claw_kairos_daemon"], capture_output=True)
-            st.success("✅ 守护进程已停止")
-            st.rerun()
-    else:
-        st.warning("⚠️ 守护进程未运行")
-        gen_hour = st.number_input("每日自动生成时间（小时）", min_value=0, max_value=23, value=3)
-        if st.button("🚀 启动守护进程", type="primary"):
-            env = os.environ.copy()
-            if hasattr(sys, '_MEIPASS'):
-                env["APP_BUILTIN_RESOURCES"] = sys._MEIPASS
-            subprocess.Popen([DAEMON_SCRIPT_PATH, str(gen_hour)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid, env=env)
-            st.success(f"✅ 守护进程已启动，每日凌晨{gen_hour}点自动生成章节")
-            st.rerun()
-with col_daemon2:
-    if os.path.exists(CHAPTER_NUM_FILE):
-        current_chapter_daemon = open(CHAPTER_NUM_FILE, "r").read().strip()
-        st.info(f"📊 当前守护进程章节号：第{current_chapter_daemon}章 | 日志路径：~/OpenClaw_Arch/kairos_daemon.log")
-    else:
-        st.info("📊 守护进程章节号未初始化，首次生成后自动同步")
+st.info("⚠️ 守护进程功能正在维护中，即将上线！请使用下方的「全自动连载」功能手动生成章节。")
 st.markdown("---")
 
 # 核心操作区
@@ -1415,14 +1391,9 @@ with tab_serial:
             with open(settings_file, "w", encoding="utf-8") as f:
                 json.dump(serial_settings, f, ensure_ascii=False, indent=2)
             
-            # 启动守护进程
+            # 启动守护进程（暂时禁用）
             if enable_schedule:
-                # 利用现有的守护进程功能
-                env = os.environ.copy()
-                if hasattr(sys, '_MEIPASS'):
-                    env["APP_BUILTIN_RESOURCES"] = sys._MEIPASS
-                subprocess.Popen([DAEMON_SCRIPT_PATH, str(schedule_hour)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setsid, env=env)
-                st.success(f"✅ 全自动连载已启动，每日凌晨{schedule_hour}点自动生成章节！")
+                st.warning("⚠️ 定时守护进程功能正在维护中，即将上线！请使用「立即生成」功能。")
             else:
                 # 立即开始生成
                 st.info("🔄 正在生成章节...")
