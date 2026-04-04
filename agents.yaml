@@ -1,17 +1,13 @@
 agents:
-  # ========== 主脑：囡囡-总控 | DeerFlow 2.0原生动态架构 | 唯一常驻单元 
-==========
+  # ========== 主脑：囡囡-总控 | DeerFlow 2.0原生动态架构 | 唯一常驻单元 ==========
   - name: 囡囡-总控
     codename: The_Orchestrator
-    description: 
-"全局调度主脑：负责网文工厂任务拆解、云端工具调用与自动化编排，绝不亲自下场执行苦力任务"
-    model: "DeepSeek-R1-0528"              # ✅ 
-已精准替换为截图中的主脑模型
+    description: "全局调度主脑：负责网文工厂任务拆解、云端工具调用与自动化编排，绝不亲自下场执行苦力任务"
+    model: "${ORCHESTRATOR_MODEL:-DeepSeek-R1-0528}"
     provider: "openai"
-    base_url: "https://api.scnet.cn/api/llm/v1"          # <--- 在 .env 
-中填入你的 API 接口地址
-    api_key: "sk-NDgyLTIxMjk3NzM0NDYyLTE3NzQ1NjA0OTU0ODE="
-    temperature: 0.3
+    base_url: "${ORCHESTRATOR_BASE_URL:-${API_BASE_URL:-https://api.scnet.cn/api/llm/v1}}"
+    api_key: "${ORCHESTRATOR_API_KEY:-${LLM_API_KEY:-sk-NDgyLTIxMjk3NzM0NDYyLTE3NzQ1NjA0OTU0ODE=}}"
+    temperature: ${ORCHESTRATOR_TEMPERATURE:-0.3}
     system_prompt: |
       你是唯一常驻Lead Agent，严格遵循DeerFlow 
 2.0无状态动态编排核心逻辑，运行于散热极度敏感的2015款iMac宿主机，100%遵守以下【物理级铁则】，违者视为系统故障：
@@ -47,14 +43,11 @@ ID，绝不硬编码
     codename: Novel_Factory
     description: 
 "番茄爽文专属生产线，无状态临时执行单元，仅主脑调度唤醒，执行完毕立即销毁"
-    model: "MiniMax-M2.5"                  # ✅ 
-已精准替换为截图中的龙虾模型
-    provider: "openai"                     # 中转站均兼容此协议，保持 
-openai 即可
-    base_url: "https://api.scnet.cn/api/llm/v1"             # <--- 在 .env 
-中填入你的 API 接口地址
-    api_key: "sk-NDgyLTIxMjk3NzM0NDYyLTE3NzQ1NjA0OTU0ODE="
-    temperature: 0.8
+    model: "${WRITER_MODEL:-MiniMax-M2.5}"
+    provider: "openai"
+    base_url: "${WRITER_BASE_URL:-${API_BASE_URL:-https://api.scnet.cn/api/llm/v1}}"
+    api_key: "${WRITER_API_KEY:-${LLM_API_KEY:-sk-NDgyLTIxMjk3NzM0NDYyLTE3NzQ1NjA0OTU0ODE=}}"
+    temperature: ${WRITER_TEMPERATURE:-0.8}
     system_prompt: |
       
 你是番茄风爽文专属生产线，严格执行「午夜屠夫」协议，仅主脑调度唤醒，执行完毕立即销毁上下文，无残留、无常驻。
