@@ -1,4 +1,4 @@
-# 🚀 Mars - 赛博印钞机 Pro
+# 🚀 OpenMars - 赛博印钞机 Pro
 
 基于Claude Code泄露源码的工业级网文自动化创作系统。
 
@@ -88,4 +88,4 @@ MIT License，仅供学习研究使用。
 - OpenClaw团队
 
 ---
-**Mars祝您创作愉快！** 🎉
+**OpenMars祝您创作愉快！** 🎉
