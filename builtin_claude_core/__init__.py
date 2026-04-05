@@ -1,104 +1,16 @@
-# 赛博印钞机 Pro 核心模块导出
-__version__ = "2.3.0"
-
-# 核心推理引擎
-from .query_engine import ClaudeQueryEngine, AsyncQueryEngine, get_session_engine
-
-# 记忆系统
-from .memory_palace_simple import SimpleMemoryPalace, get_memory_palace
-from .memory_palace import MemoryPalace
-
-# 一致性校验器
-from .consistency_checker import HardRuleConsistencyChecker, ConsistencyCheckResult
-from .consistency_agent import ConsistencyAgent, get_consistency_agent
-
-# LLM 适配器
-from .llm_adapter import LLMAdapter, get_llm_adapter, reset_llm_adapter
-
-# 文件锁
-from .file_lock import FileLockManager, lock_manager
-
-# 配置管理
-from .config_manager import ConfigManager
-
-# 性能监控
-from .metrics import MetricsCollector, GenerationMetrics
-
-# Coordinator 协调器
-from .coordinator import Coordinator
-
-# AutoDream 梦游巩固
-from .autodream import AutoDream, get_autodream
-
-# Kairos 守护进程
-from .kairos_daemon import KairosDaemon
-
-# 日志
+# =============================================
+# 赛博印钞机 Pro | 核心模块导出
+# =============================================
 from .logger import logger
+from .llm_adapter import get_llm_adapter
+from .memory_palace import SimpleMemoryPalace, get_memory_palace
+from .query_engine import AsyncQueryEngine, get_query_engine
 
-# 语义记忆系统
-from .semantic_memory import SemanticMemory, semantic_memory
-
-# 钩子系统
-from .hooks import HookType, HookManager, hook_manager
-from .hooks_simple import SimpleHookType, SimpleHookManager
-
-# 技能管理
-from .skill_manager import WritingSkill, SkillManager, skill_manager
-
-# Agent团队
-from .agent_teams import (
-    BaseAgent,
-    OutlineAgent,
-    WriterAgent,
-    ReviewAgent,
-    PolishAgent,
-    ForeshadowAgent,
-    WritingTeam,
-    get_writing_team
-)
-
-# 全部导出
 __all__ = [
-    "ClaudeQueryEngine",
-    "AsyncQueryEngine",
-    "get_session_engine",
+    "logger",
+    "get_llm_adapter",
     "SimpleMemoryPalace",
     "get_memory_palace",
-    "MemoryPalace",
-    "HardRuleConsistencyChecker",
-    "ConsistencyCheckResult",
-    "ConsistencyAgent",
-    "get_consistency_agent",
-    "LLMAdapter",
-    "get_llm_adapter",
-    "reset_llm_adapter",
-    "FileLockManager",
-    "lock_manager",
-    "ConfigManager",
-    "MetricsCollector",
-    "GenerationMetrics",
-    "Coordinator",
-    "AutoDream",
-    "get_autodream",
-    "KairosDaemon",
-    "logger",
-    "SemanticMemory",
-    "semantic_memory",
-    "HookType",
-    "HookManager",
-    "hook_manager",
-    "SimpleHookType",
-    "SimpleHookManager",
-    "WritingSkill",
-    "SkillManager",
-    "skill_manager",
-    "BaseAgent",
-    "OutlineAgent",
-    "WriterAgent",
-    "ReviewAgent",
-    "PolishAgent",
-    "ForeshadowAgent",
-    "WritingTeam",
-    "get_writing_team",
+    "AsyncQueryEngine",
+    "get_query_engine",
 ]

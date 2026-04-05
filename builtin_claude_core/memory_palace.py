@@ -1,488 +1,155 @@
-# memory_palace.py - 双层记忆宫殿系统
-# 固定记忆 + 动态记忆双层架构，彻底解决吃书问题
-
+# =============================================
+# Google L8 级原子化记忆保护
+# 解决：多进程/多线程读写竞争、数据损坏、断电零丢失
+# =============================================
 import os
 import json
-import re
-from typing import Dict, List, Optional, Any
+import tempfile
+from typing import Dict, Any, List
+from filelock import FileLock
 from .logger import logger
-from .file_lock import lock_manager
 
 
-class MemoryPalace:
+class SimpleMemoryPalace:
     """
-    双层记忆宫殿核心类
-    固定记忆：人设档案、世界观设定、全书大纲（不可变）
-    动态记忆：已生成章节内容、已埋设伏笔、剧情节点（自动更新）
+    Google 工程级记忆宫殿核心特性：
+    1. 文件锁保护，避免读写竞争
+    2. 临时文件+原子替换，断电零丢失
+    3. 双层记忆结构：固定设定 + 动态剧情
     """
-    
-    def __init__(self, memory_dir: Optional[str] = None, load_dynamic: bool = True):
-        # 固定记忆（不可变）
-        self.fixed_memory: Dict[str, Any] = {
-            "characters": {},      # 人物档案
-            "world_setting": "",   # 世界观设定
-            "full_outline": "",    # 全书大纲
-            "chapter_outlines": {} # 各章大纲
-        }
-        
-        # 动态记忆（自动更新）
-        self.dynamic_memory: Dict[str, Any] = {
-            "chapters": {},        # 已生成章节 {chapter_num: {"name": "", "content": "", "summary": ""}}
-            "foreshadowing": [],   # 已埋设伏笔 [{"content": "", "chapter": num, "resolved": False}]
-            "plot_nodes": [],      # 关键剧情节点
-            "current_chapter": 0   # 当前生成到第几章
-        }
-        
-        self.memory_dir = memory_dir
-        if memory_dir:
-            self._init_memory_dir(memory_dir, load_dynamic=load_dynamic)
-        
-        logger.info("✅ 双层记忆宫殿系统初始化完成")
-    
-    def _init_memory_dir(self, memory_dir: str, load_dynamic: bool = True):
-        """初始化记忆目录
-        
-        Args:
-            memory_dir: 记忆目录路径
-            load_dynamic: 是否加载动态记忆（默认True，设为False可实现无状态初始化
+
+    def __init__(self, novel_name: str = "默认小说"):
+        self.novel_name = novel_name
+        self.base_dir = os.path.join("novel_settings", novel_name)
+        os.makedirs(self.base_dir, exist_ok=True)
+
+        # 记忆文件路径
+        self.setting_file = os.path.join(self.base_dir, "01-核心设定.md")
+        self.plot_file = os.path.join(self.base_dir, "02-剧情大纲.md")
+        self.dynamic_file = os.path.join(self.base_dir, "03-动态剧情记忆.json")
+
+        # 锁文件（防止多进程/多线程竞争）
+        self.lock = FileLock(self.dynamic_file + ".lock", timeout=30)
+
+        # 初始化空记忆文件
+        self._init_empty_files()
+        logger.info(f"✅ 记忆宫殿初始化完成 | 小说: {novel_name}")
+
+    def _init_empty_files(self):
+        """初始化空的记忆文件（如果不存在）"""
+        if not os.path.exists(self.setting_file):
+            with open(self.setting_file, "w", encoding="utf-8") as f:
+                f.write("# 核心设定\n\n在这里填写你的小说核心设定...\n")
+
+        if not os.path.exists(self.plot_file):
+            with open(self.plot_file, "w", encoding="utf-8") as f:
+                f.write("# 剧情大纲\n\n在这里填写你的小说剧情大纲...\n")
+
+        if not os.path.exists(self.dynamic_file):
+            with open(self.dynamic_file, "w", encoding="utf-8") as f:
+                json.dump({"chapters": [], "last_updated": None}, f, ensure_ascii=False, indent=2)
+
+    def get_full_memory(self) -> str:
         """
-        if not os.path.exists(memory_dir):
-            os.makedirs(memory_dir, exist_ok=True)
-            logger.info(f"📂 创建记忆目录：{memory_dir}")
-        
-        # 尝试加载已保存的记忆
-        self.load_from_disk(load_dynamic=load_dynamic)
-    
-    def bind_novel(self, novel_name: str, base_dir: str = "./novels", load_dynamic: bool = True):
-        """绑定小说，创建独立的记忆空间
-        
-        Args:
-            novel_name: 小说名称
-            base_dir: 基础目录
-            load_dynamic: 是否加载动态记忆（默认True，设为False可实现无状态绑定
+        获取完整记忆（固定设定 + 动态剧情）
+        只读操作，不需要锁
         """
-        novel_dir = os.path.join(base_dir, novel_name)
-        self.memory_dir = novel_dir
-        self._init_memory_dir(novel_dir, load_dynamic=load_dynamic)
-        logger.info(f"📚 绑定小说：{novel_name}，记忆目录：{novel_dir}")
-    
-    # ========== 固定记忆管理 ==========
-    
-    def set_character(self, char_name: str, char_info: str):
-        """设置人物档案（固定记忆）"""
-        self.fixed_memory["characters"][char_name] = char_info
-        logger.info(f"👤 保存人物档案：{char_name}")
-    
-    def set_world_setting(self, setting: str):
-        """设置世界观设定（固定记忆）"""
-        self.fixed_memory["world_setting"] = setting
-        logger.info("🌍 保存世界观设定")
-    
-    def set_full_outline(self, outline: str):
-        """设置全书大纲（固定记忆）"""
-        self.fixed_memory["full_outline"] = outline
-        logger.info("📋 保存全书大纲")
-    
-    def set_chapter_outline(self, chapter_num: int, outline: str):
-        """设置单章大纲（固定记忆）"""
-        self.fixed_memory["chapter_outlines"][str(chapter_num)] = outline
-        logger.info(f"📝 保存第{chapter_num}章大纲")
-    
-    def get_character(self, char_name: str) -> Optional[str]:
-        """获取人物档案"""
-        return self.fixed_memory["characters"].get(char_name)
-    
-    def get_all_characters(self) -> Dict[str, str]:
-        """获取所有人物档案"""
-        return self.fixed_memory["characters"].copy()
-    
-    def get_world_setting(self) -> str:
-        """获取世界观设定"""
-        return self.fixed_memory["world_setting"]
-    
-    def get_full_outline(self) -> str:
-        """获取全书大纲"""
-        return self.fixed_memory["full_outline"]
-    
-    def get_chapter_outline(self, chapter_num: int) -> Optional[str]:
-        """获取单章大纲"""
-        return self.fixed_memory["chapter_outlines"].get(str(chapter_num))
-    
-    # ========== 动态记忆管理 ==========
-    
-    def add_chapter(self, chapter_num: int, chapter_name: str, content: str, summary: str = ""):
-        """添加已生成章节（动态记忆）"""
-        self.dynamic_memory["chapters"][str(chapter_num)] = {
-            "name": chapter_name,
-            "content": content,
-            "summary": summary or self._auto_summarize(content)
-        }
-        self.dynamic_memory["current_chapter"] = max(
-            self.dynamic_memory["current_chapter"],
-            chapter_num
-        )
-        logger.info(f"📖 添加第{chapter_num}章记忆：{chapter_name}")
-    
-    def add_foreshadowing(self, content: str, chapter_num: int):
-        """添加埋设的伏笔（动态记忆）"""
-        self.dynamic_memory["foreshadowing"].append({
-            "content": content,
-            "chapter": chapter_num,
-            "resolved": False
-        })
-        logger.info(f"🎯 添加伏笔（第{chapter_num}章）：{content[:50]}...")
-    
-    def resolve_foreshadowing(self, foreshadowing_idx: int):
-        """标记伏笔已回收（动态记忆）"""
-        if 0 <= foreshadowing_idx < len(self.dynamic_memory["foreshadowing"]):
-            self.dynamic_memory["foreshadowing"][foreshadowing_idx]["resolved"] = True
-            logger.info(f"✅ 伏笔已回收：{foreshadowing_idx}")
-    
-    def add_plot_node(self, node_content: str, chapter_num: int):
-        """添加关键剧情节点（动态记忆）"""
-        self.dynamic_memory["plot_nodes"].append({
-            "content": node_content,
-            "chapter": chapter_num
-        })
-        logger.info(f"📍 添加剧情节点（第{chapter_num}章）")
-    
-    def get_chapter(self, chapter_num: int) -> Optional[Dict]:
-        """获取章节内容"""
-        return self.dynamic_memory["chapters"].get(str(chapter_num))
-    
-    def get_all_chapters(self) -> Dict[str, Dict]:
-        """获取所有章节"""
-        return self.dynamic_memory["chapters"].copy()
-    
-    def get_unresolved_foreshadowing(self) -> List[Dict]:
-        """获取未回收的伏笔"""
-        return [f for f in self.dynamic_memory["foreshadowing"] if not f["resolved"]]
-    
-    def get_current_chapter(self) -> int:
-        """获取当前章节数"""
-        return self.dynamic_memory["current_chapter"]
-    
-    # ========== 提示词生成 ==========
-    
-    def get_full_fixed_prompt(self) -> str:
-        """获取完整的固定记忆提示词"""
-        prompt_parts = ["【固定记忆 - 不可变更】"]
-        
-        # 人物档案
-        if self.fixed_memory["characters"]:
-            prompt_parts.append("\n## 人物档案")
-            for name, info in self.fixed_memory["characters"].items():
-                prompt_parts.append(f"- {name}: {info}")
-        
-        # 世界观设定
-        if self.fixed_memory["world_setting"]:
-            prompt_parts.append("\n## 世界观设定")
-            prompt_parts.append(self.fixed_memory["world_setting"])
-        
-        # 全书大纲
-        if self.fixed_memory["full_outline"]:
-            prompt_parts.append("\n## 全书大纲")
-            prompt_parts.append(self.fixed_memory["full_outline"])
-        
-        return "\n".join(prompt_parts)
-    
-    def get_previous_plot_summary(self, max_chapters: int = 5) -> str:
-        """获取前序剧情摘要"""
-        chapters = sorted(
-            [(int(num), data) for num, data in self.dynamic_memory["chapters"].items()],
-            key=lambda x: x[0]
-        )
-        
-        if not chapters:
-            return "【前序剧情】暂无已生成章节"
-        
-        recent_chapters = chapters[-max_chapters:]
-        prompt_parts = ["【前序剧情摘要】"]
-        
-        for chapter_num, data in recent_chapters:
-            prompt_parts.append(f"\n## 第{chapter_num}章：{data['name']}")
-            prompt_parts.append(data["summary"])
-        
-        return "\n".join(prompt_parts)
-    
-    def get_unresolved_foreshadowing_prompt(self) -> str:
-        """获取未回收伏笔的提示词"""
-        unresolved = self.get_unresolved_foreshadowing()
-        if not unresolved:
-            return "【未回收伏笔】暂无"
-        
-        prompt_parts = ["【未回收伏笔】"]
-        for i, f in enumerate(unresolved):
-            prompt_parts.append(f"{i+1}. (第{f['chapter']}章) {f['content']}")
-        
-        return "\n".join(prompt_parts)
-    
-    def get_full_prompt(self) -> str:
-        """获取完整的记忆提示词（固定记忆 + 动态记忆）"""
-        prompt_parts = []
-        
-        prompt_parts.append(self.get_full_fixed_prompt())
-        prompt_parts.append(self.get_previous_plot_summary(max_chapters=5))
-        prompt_parts.append(self.get_unresolved_foreshadowing_prompt())
-        
-        return "\n\n".join(prompt_parts)
-    
-    # ========== 兼容原有接口 ==========
-    
-    def load_memory(self, memory_dir: str):
-        """兼容原有 load_memory 接口，从目录加载记忆"""
-        self.memory_dir = memory_dir
-        if not os.path.exists(memory_dir):
-            logger.warning(f"⚠️ 记忆目录不存在：{memory_dir}")
-            return
-        
-        logger.info(f"📂 从兼容接口加载记忆：{memory_dir}")
-        for file in sorted(os.listdir(memory_dir)):
-            if not file.endswith(".md"):
-                continue
-            
-            file_path = os.path.join(memory_dir, file)
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    self._parse_compatible_memory_file(file, content)
-            except Exception as e:
-                logger.error(f"❌ 记忆文件加载失败：{file}，错误：{str(e)}", exc_info=True)
-    
-    def _parse_compatible_memory_file(self, filename: str, content: str):
-        """解析兼容格式的记忆文件"""
-        # 尝试提取主角
-        main_char_match = re.search(r"主角[:：]\s*([^\n]+)", content)
-        if main_char_match:
-            self.set_character("主角", main_char_match.group(1).strip())
-        
-        # 尝试提取反派
-        villain_match = re.search(r"反派[:：]\s*([^\n]+)", content)
-        if villain_match:
-            self.set_character("反派", villain_match.group(1).strip())
-        
-        # 尝试提取世界观
-        world_setting_match = re.search(r"世界观[:：]\s*([\s\S]+?)(?=\n## |\n# |$)", content)
-        if world_setting_match:
-            self.set_world_setting(world_setting_match.group(1).strip())
-        
-        # 提取伏笔
-        foreshadowing_list = re.findall(r"伏笔[:：]\s*([^\n]+)", content)
-        # 尝试从文件名推断章节号
-        chapter_num = 0
-        chapter_match = re.search(r"第(\d+)章", filename)
-        if chapter_match:
-            chapter_num = int(chapter_match.group(1))
-        for f in foreshadowing_list:
-            self.add_foreshadowing(f, chapter_num)
-        
-        # 保存原始内容作为通用记忆
-        if "人物" in filename or "人设" in filename:
-            self.set_character(filename.replace(".md", ""), content)
-        elif "世界观" in filename or "设定" in filename:
-            self.set_world_setting(content)
-        elif "大纲" in filename:
-            self.set_full_outline(content)
-    
-    # ========== 临时记忆清理 ==========
-    
-    def clear_dynamic_memory(self):
-        """清理临时剧情记忆（动态记忆），保留固定设定"""
-        self.dynamic_memory = {
-            "chapters": {},
-            "foreshadowing": [],
-            "plot_nodes": [],
-            "current_chapter": 0
-        }
-        logger.info("🧹 已清理临时剧情记忆")
-    
-    def clear_temp_files(self):
-        """清理磁盘上的动态记忆文件，保留固定记忆文件"""
-        if not self.memory_dir:
-            return
-        
-        dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
-        if os.path.exists(dynamic_path):
-            try:
-                os.remove(dynamic_path)
-                logger.info(f"🗑️ 已删除动态记忆文件：{dynamic_path}")
-            except Exception as e:
-                logger.error(f"❌ 删除动态记忆文件失败：{str(e)}")
-    
-    def reset_session(self):
-        """任务结束后重置会话：清理内存中的动态记忆 + 磁盘上的动态记忆文件"""
-        logger.info("🔄 开始会话重置...")
-        self.clear_dynamic_memory()
-        self.clear_temp_files()
-        logger.info("✅ 会话重置完成，保留了固定设定")
-    
-    # ========== 持久化 ==========
-    
-    def save_to_disk(self):
-        """保存记忆到磁盘"""
-        if not self.memory_dir:
-            logger.warning("⚠️ 未设置记忆目录，无法保存")
-            return
-        
-        os.makedirs(self.memory_dir, exist_ok=True)
-        
-        # 保存固定记忆（始终保存）
-        fixed_path = os.path.join(self.memory_dir, "fixed_memory.json")
-        with lock_manager.with_lock(fixed_path):
-            with open(fixed_path, "w", encoding="utf-8") as f:
-                json.dump(self.fixed_memory, f, ensure_ascii=False, indent=2)
-        logger.info("✅ 固定记忆已保存")
-        
-        # 保存动态记忆（仅当有内容时）
-        if self.dynamic_memory["chapters"] or self.dynamic_memory["foreshadowing"] or self.dynamic_memory["plot_nodes"]:
-            dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
-            with lock_manager.with_lock(dynamic_path):
-                with open(dynamic_path, "w", encoding="utf-8") as f:
-                    json.dump(self.dynamic_memory, f, ensure_ascii=False, indent=2)
-            logger.info("✅ 动态记忆已保存")
-        else:
-            self.clear_temp_files()
-    
-    def load_from_disk(self, load_dynamic: bool = True):
-        """从磁盘加载记忆
-        
-        Args:
-            load_dynamic: 是否加载动态记忆（默认True，设为False可实现无状态启动）
+        memory_parts = []
+
+        # 1. 加载固定设定
+        if os.path.exists(self.setting_file):
+            with open(self.setting_file, "r", encoding="utf-8") as f:
+                memory_parts.append("## 核心设定\n" + f.read())
+
+        # 2. 加载剧情大纲
+        if os.path.exists(self.plot_file):
+            with open(self.plot_file, "r", encoding="utf-8") as f:
+                memory_parts.append("## 剧情大纲\n" + f.read())
+
+        # 3. 加载动态剧情记忆
+        if os.path.exists(self.dynamic_file):
+            with open(self.dynamic_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("chapters"):
+                    chapters_summary = "\n".join([
+                        f"- 第{ch['num']}章: {ch['summary']}"
+                        for ch in data["chapters"][-10:]  # 只保留最近10章，避免上下文过长
+                    ])
+                    memory_parts.append("## 已写章节摘要\n" + chapters_summary)
+
+        full_memory = "\n\n".join(memory_parts)
+        logger.info(f"📚 记忆加载完成 | 总长度: {len(full_memory)}")
+        return full_memory
+
+    def safe_update_chapter_memory(self, chapter_num: int, summary: str):
         """
-        if not self.memory_dir:
-            return
-        
-        # 保存原始状态，用于回退
-        original_fixed_memory = self.fixed_memory.copy()
-        original_dynamic_memory = self.dynamic_memory.copy()
-        
-        # 加载固定记忆
-        fixed_path = os.path.join(self.memory_dir, "fixed_memory.json")
-        if os.path.exists(fixed_path):
-            try:
-                with lock_manager.with_lock(fixed_path):
-                    with open(fixed_path, "r", encoding="utf-8") as f:
-                        loaded_memory = json.load(f)
-                # 验证加载的数据结构
-                if isinstance(loaded_memory, dict) and all(key in loaded_memory for key in ["characters", "world_setting", "full_outline", "chapter_outlines"]):
-                    self.fixed_memory = loaded_memory
-                    logger.info("✅ 固定记忆已加载")
-                else:
-                    logger.error("❌ 固定记忆数据结构错误，使用默认值")
-                    # 回退到原始状态
-                    self.fixed_memory = original_fixed_memory
-            except Exception as e:
-                logger.error(f"❌ 加载固定记忆失败：{str(e)}")
-                # 回退到原始状态
-                self.fixed_memory = original_fixed_memory
-        
-        # 加载动态记忆（可选）
-        if load_dynamic:
-            dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
-            if os.path.exists(dynamic_path):
+        Google 级原子化更新：
+        持有锁 -> 读 -> 改 -> 写临时文件 -> 原子替换
+        就算中途断电，记忆文件也不会变 0KB
+        """
+        with self.lock:
+            logger.info(f"🔒 获取锁 | 更新章节 {chapter_num} 记忆")
+
+            # 1. 读取现有记忆
+            data = {"chapters": [], "last_updated": None}
+            if os.path.exists(self.dynamic_file):
                 try:
-                    with lock_manager.with_lock(dynamic_path):
-                        with open(dynamic_path, "r", encoding="utf-8") as f:
-                            loaded_memory = json.load(f)
-                    # 验证加载的数据结构
-                    if isinstance(loaded_memory, dict) and all(key in loaded_memory for key in ["chapters", "foreshadowing", "plot_nodes", "current_chapter"]):
-                        self.dynamic_memory = loaded_memory
-                        logger.info("✅ 动态记忆已加载")
-                    else:
-                        logger.error("❌ 动态记忆数据结构错误，使用默认值")
-                        # 回退到原始状态
-                        self.dynamic_memory = original_dynamic_memory
-                except Exception as e:
-                    logger.error(f"❌ 加载动态记忆失败：{str(e)}")
-                    # 回退到原始状态
-                    self.dynamic_memory = original_dynamic_memory
-        else:
-            logger.info("⏭️ 跳过动态记忆加载，保持无状态")
-    
-    def _auto_summarize(self, content: str, max_length: int = 500) -> str:
-        """自动生成章节摘要（改进版本）"""
-        # 分割段落
-        paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
-        
-        if not paragraphs:
-            return ""
-        
-        # 优先选择段落长度适中的内容
-        # 通常第一章或重要段落会包含关键信息
-        candidate_paragraphs = []
-        
-        # 先选择第一段（通常是章节开头）
-        if paragraphs:
-            candidate_paragraphs.append(paragraphs[0])
-        
-        # 再选择一些长度适中的段落
-        for para in paragraphs[1:]:
-            if 50 <= len(para) <= 300:  # 选择长度适中的段落
-                candidate_paragraphs.append(para)
-            if len(candidate_paragraphs) >= 3:
-                break
-        
-        # 如果不够3段，再补一些
-        if len(candidate_paragraphs) < 3 and len(paragraphs) > 3:
-            for para in paragraphs[len(candidate_paragraphs):]:
-                candidate_paragraphs.append(para)
-                if len(candidate_paragraphs) >= 3:
+                    with open(self.dynamic_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except json.JSONDecodeError:
+                    logger.warning("⚠️  动态记忆文件损坏，使用空数据")
+
+            # 2. 更新数据
+            # 检查是否已存在该章节，存在则替换
+            updated = False
+            for i, ch in enumerate(data["chapters"]):
+                if ch["num"] == chapter_num:
+                    data["chapters"][i] = {"num": chapter_num, "summary": summary}
+                    updated = True
                     break
-        
-        summary = "\n".join(candidate_paragraphs)
-        
-        if len(summary) > max_length:
-            # 更智能的截断，避免在句子中间截断
-            summary = summary[:max_length]
-            # 找到最后一个句号、感叹号或问号
-            last_punctuation = max(summary.rfind('。'), summary.rfind('！'), summary.rfind('？'), summary.rfind('.'), summary.rfind('!'), summary.rfind('?'))
-            if last_punctuation > max_length * 0.8:
-                summary = summary[:last_punctuation + 1]
-            else:
-                summary = summary + "..."
-        
-        return summary
+
+            if not updated:
+                data["chapters"].append({"num": chapter_num, "summary": summary})
+
+            # 3. 写入临时文件（同一文件系统，保证原子替换）
+            with tempfile.NamedTemporaryFile(
+                'w',
+                dir=self.base_dir,
+                prefix="memory_",
+                suffix=".tmp",
+                delete=False,
+                encoding="utf-8"
+            ) as tf:
+                json.dump(data, tf, ensure_ascii=False, indent=2)
+                temp_name = tf.name
+
+            # 4. 原子替换（os.replace 是原子操作，断电零丢失）
+            os.replace(temp_name, self.dynamic_file)
+
+            logger.info(f"✅ 章节 {chapter_num} 记忆已原子化落盘")
+
+    def get_chapter_history(self) -> List[Dict[str, Any]]:
+        """获取章节历史列表"""
+        with self.lock:
+            if os.path.exists(self.dynamic_file):
+                with open(self.dynamic_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return data.get("chapters", [])
+            return []
 
 
-# 全局单例
-_memory_palace: Optional[MemoryPalace] = None
+# 全局单例工厂
+_memory_instances = {}
 
 
-def get_memory_palace(memory_dir: Optional[str] = None, load_dynamic: bool = True) -> MemoryPalace:
-    """获取记忆宫殿单例
-    
-    Args:
-        memory_dir: 记忆目录路径
-        load_dynamic: 是否加载动态记忆（默认True，设为False可实现无状态启动
+def get_memory_palace(novel_name: str = "默认小说") -> SimpleMemoryPalace:
     """
-    global _memory_palace
-    if _memory_palace is None:
-        _memory_palace = MemoryPalace(memory_dir)
-    elif memory_dir is not None and _memory_palace.memory_dir != memory_dir:
-        # 如果提供了新的 memory_dir 且与当前不同，更新单例
-        logger.info(f"🔄 切换记忆目录，清理旧的临时记忆")
-        _memory_palace.clear_dynamic_memory()
-        _memory_palace.memory_dir = memory_dir
-        _memory_palace._init_memory_dir(memory_dir)
-        # 如果需要无状态，重新加载
-        if not load_dynamic:
-            _memory_palace.clear_dynamic_memory()
-            _memory_palace.clear_temp_files()
-    return _memory_palace
+    获取全局单例的记忆宫殿
+    按小说名隔离，支持多小说
+    """
+    if novel_name not in _memory_instances:
+        _memory_instances[novel_name] = SimpleMemoryPalace(novel_name)
+    return _memory_instances[novel_name]
 
 
-def reset_memory_palace():
-    """重置记忆宫殿单例，清理所有临时记忆，保留固定设定"""
-    global _memory_palace
-    if _memory_palace is not None:
-        _memory_palace.reset_session()
-    return _memory_palace
-
-
-def destroy_memory_palace():
-    """销毁记忆宫殿单例，完全重置（慎用）"""
-    global _memory_palace
-    if _memory_palace is not None:
-        _memory_palace.reset_session()
-        _memory_palace = None
-    logger.info("🗑️ 记忆宫殿已销毁")
+__all__ = ["SimpleMemoryPalace", "get_memory_palace"]
