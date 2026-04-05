@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, Any, Optional
 from enum import Enum
 from .logger import logger
 import asyncio

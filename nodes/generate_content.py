@@ -2,11 +2,14 @@ import os
 import sys
 import subprocess
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from nodes.base import BaseNode
 from models.dag import DAGPipeline, NodeStatus
 from utils.logger import Logger
 from utils.helpers import get_resource_path, extract_latest_novel_from_output, clean_mermaid_code, count_real_chars
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from builtin_claude_core.file_lock import lock_manager
 
 def generate_content_node(node_id: str, node_name: str, pipeline: DAGPipeline, context: Dict[str, Any], logger: Logger) -> bool:
     """多智能体创作节点 - 无状态纯函数版本"""
@@ -34,7 +37,7 @@ def generate_content_node(node_id: str, node_name: str, pipeline: DAGPipeline, c
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    generated_content = loop.run_until_complete(
+                    oh_generated_content = loop.run_until_complete(
                         harness.generate_content(
                             prompt=final_prompt,
                             target_words=target_words,
@@ -46,11 +49,12 @@ def generate_content_node(node_id: str, node_name: str, pipeline: DAGPipeline, c
                 
                 logger.write(f"✅ [{node_name}] OpenHarness 生成完成")
                 
-                from utils.helpers import ensure_output_dir
-                output_dir = ensure_output_dir()
+                output_dir = get_resource_path("output")
+                os.makedirs(output_dir, exist_ok=True)
                 output_file = os.path.join(output_dir, f"{chapter_title}_{chapter_num:03d}.md")
-                with open(output_file, 'w', encoding='utf-8') as f:
-                    f.write(generated_content)
+                with lock_manager.with_lock(output_file):
+                    with open(output_file, 'w', encoding='utf-8') as f:
+                        f.write(oh_generated_content)
                 logger.write(f"📝 [{node_name}] 已保存到：{output_file}")
                 
             except Exception as oh_error:
@@ -75,9 +79,10 @@ def generate_content_node(node_id: str, node_name: str, pipeline: DAGPipeline, c
                     env=env
                 )
                 
-                for line in process.stdout:
-                    if line.strip():
-                        logger.write(f"[Builtin Core] {line.strip()}")
+                if process.stdout is not None:
+                    for line in process.stdout:
+                        if line.strip():
+                            logger.write(f"[Builtin Core] {line.strip()}")
                 
                 process.wait(timeout=600)
                 if process.returncode not in [0, 124]:
@@ -86,7 +91,7 @@ def generate_content_node(node_id: str, node_name: str, pipeline: DAGPipeline, c
                 raise Exception("未找到生成脚本 run_builtin_core.py")
         
         logger.write(f"📂 [{node_name}] 正在从输出目录提取小说正文...")
-        generated_content = extract_latest_novel_from_output()
+        generated_content: Optional[str] = extract_latest_novel_from_output()
         if not generated_content:
             raise Exception("无法从输出目录提取小说正文")
         

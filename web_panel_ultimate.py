@@ -22,6 +22,8 @@ def init_session_state():
         st.session_state.current_workspace = 'quick'
     if 'sidebar_expanded' not in st.session_state:
         st.session_state.sidebar_expanded = True
+    if 'chat_messages' not in st.session_state:
+        st.session_state.chat_messages = []
 
 init_session_state()
 state = st.session_state.state
@@ -187,6 +189,7 @@ with st.sidebar:
     st.markdown("---")
     
     workspaces = {
+        'chat': {'icon': '💬', 'name': 'AI 助手', 'desc': '对话管理'},
         'quick': {'icon': '⚡', 'name': '快速模式', 'desc': '30秒上手'},
         'config': {'icon': '⚙️', 'name': '生成配置', 'desc': '详细参数'},
         'llm': {'icon': '🤖', 'name': '大模型配置', 'desc': 'API设置'},
@@ -234,7 +237,143 @@ current_ws = st.session_state.current_workspace
 st.title(f"{workspaces[current_ws]['icon']} {workspaces[current_ws]['name']}")
 st.markdown(f"<p style='color: #64748b; margin-top: -8px; margin-bottom: 24px;'>{workspaces[current_ws]['desc']}</p>", unsafe_allow_html=True)
 
-if current_ws == 'quick':
+if current_ws == 'chat':
+    st.markdown('<div class="ultimate-card">', unsafe_allow_html=True)
+    st.markdown("### 💬 AI 助手 - 对话管理")
+    
+    chat_container = st.container()
+    
+    with chat_container:
+        for msg in st.session_state.chat_messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+    
+    st.markdown('---')
+    
+    if prompt := st.chat_input("输入消息或命令（/help 查看帮助）"):
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        
+        with chat_container:
+            with st.chat_message("user"):
+                st.markdown(prompt)
+        
+        def handle_command(cmd: str) -> str:
+            cmd = cmd.strip()
+            
+            if cmd == '/help':
+                return """**可用命令：**
+- `/help` - 显示此帮助
+- `/status` - 查看项目状态
+- `/clear` - 清空对话历史
+- `/novel list` - 列出小说章节
+- `/novel info` - 查看小说信息
+- `/config` - 查看当前配置
+"""
+            elif cmd == '/status':
+                chapter_num_file = os.path.expanduser("~/OpenMars_Arch/current_chapter.txt")
+                current_chapter = "1"
+                if os.path.exists(chapter_num_file):
+                    with open(chapter_num_file, "r") as f:
+                        current_chapter = f.read().strip() or "1"
+                
+                from utils.helpers import get_resource_path
+                output_dir = get_resource_path("output")
+                file_count = 0
+                if os.path.exists(output_dir):
+                    file_count = len([f for f in os.listdir(output_dir) if f.endswith('.md')])
+                
+                return f"""**项目状态：**
+- 当前章节：第 {current_chapter} 章
+- 已生成：{file_count} 章
+- 工作区：{current_ws}
+"""
+            elif cmd == '/clear':
+                st.session_state.chat_messages = []
+                return "✅ 对话历史已清空！"
+            
+            elif cmd.startswith('/novel list'):
+                from utils.helpers import get_resource_path
+                output_dir = get_resource_path("output")
+                
+                if os.path.exists(output_dir):
+                    files = sorted([f for f in os.listdir(output_dir) if f.endswith('.md')], reverse=True)
+                    if files:
+                        file_list = "\n".join([f"- {f}" for f in files[:20]])
+                        return f"**已生成的章节（最近 20 个）：**\n{file_list}"
+                    else:
+                        return "还没有生成任何章节"
+                else:
+                    return "输出目录不存在"
+            
+            elif cmd.startswith('/novel info'):
+                return "**小说信息：**\n- 项目：赛博印钞机 Pro\n- 类型：玄幻修仙（默认）\n- 状态：运行中"
+            
+            elif cmd.startswith('/config'):
+                env_path = ".env"
+                config_info = "**当前配置：**\n"
+                
+                if os.path.exists(env_path):
+                    with open(env_path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line and not line.startswith('#'):
+                                key, value = line.split('=', 1) if '=' in line else (line, '')
+                                if 'KEY' in key or 'PASSWORD' in key:
+                                    config_info += f"- {key}: ********\n"
+                                else:
+                                    config_info += f"- {key}: {value}\n"
+                else:
+                    config_info += "未找到 .env 文件"
+                
+                return config_info
+            
+            return None
+        
+        response = handle_command(prompt)
+        
+        if response:
+            st.session_state.chat_messages.append({"role": "assistant", "content": response})
+            with chat_container:
+                with st.chat_message("assistant"):
+                    st.markdown(response)
+        else:
+            try:
+                from builtin_claude_core.llm_adapter import get_llm_adapter
+                
+                adapter = get_llm_adapter()
+                
+                messages = []
+                for msg in st.session_state.chat_messages[-10:]:
+                    messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"]
+                    })
+                
+                with st.spinner("思考中..."):
+                    response_content = adapter.generate(
+                        prompt=prompt,
+                        system_prompt="你是赛博印钞机 Pro 的 AI 助手。你可以帮助用户管理项目、生成小说、查看状态等。回答要友好、专业、简洁。",
+                        temperature=0.7
+                    )
+                
+                st.session_state.chat_messages.append({"role": "assistant", "content": response_content})
+                
+                with chat_container:
+                    with st.chat_message("assistant"):
+                        st.markdown(response_content)
+            
+            except Exception as e:
+                error_msg = f"抱歉，发生错误：{str(e)}"
+                st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+                with chat_container:
+                    with st.chat_message("assistant"):
+                        st.error(error_msg)
+        
+        st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+elif current_ws == 'quick':
     col1, col2 = st.columns([3, 1])
     
     with col1:
@@ -341,24 +480,58 @@ elif current_ws == 'llm':
             
             for line in lines:
                 line = line.strip()
-                if line.startswith('OPENAI_API_KEY=') and api_key:
-                    new_lines.append(f'OPENAI_API_KEY={api_key}\n')
-                    found_keys.add('OPENAI_API_KEY')
-                elif line.startswith('OPENAI_API_BASE=') and api_base:
-                    new_lines.append(f'OPENAI_API_BASE={api_base}\n')
-                    found_keys.add('OPENAI_API_BASE')
-                elif line.startswith('OPENAI_MODEL=') and api_model:
-                    new_lines.append(f'OPENAI_MODEL={api_model}\n')
-                    found_keys.add('OPENAI_MODEL')
-                else:
+                updated = False
+                if api_key:
+                    if line.startswith('OPENAI_API_KEY='):
+                        new_lines.append(f'OPENAI_API_KEY={api_key}\n')
+                        found_keys.add('OPENAI_API_KEY')
+                        updated = True
+                    elif line.startswith('LLM_API_KEY='):
+                        new_lines.append(f'LLM_API_KEY={api_key}\n')
+                        found_keys.add('LLM_API_KEY')
+                        updated = True
+                if api_base and not updated:
+                    if line.startswith('OPENAI_API_BASE='):
+                        new_lines.append(f'OPENAI_API_BASE={api_base}\n')
+                        found_keys.add('OPENAI_API_BASE')
+                        updated = True
+                    elif line.startswith('API_BASE_URL='):
+                        new_lines.append(f'API_BASE_URL={api_base}\n')
+                        found_keys.add('API_BASE_URL')
+                        updated = True
+                    elif line.startswith('LLM_BASE_URL='):
+                        new_lines.append(f'LLM_BASE_URL={api_base}\n')
+                        found_keys.add('LLM_BASE_URL')
+                        updated = True
+                if api_model and not updated:
+                    if line.startswith('OPENAI_MODEL='):
+                        new_lines.append(f'OPENAI_MODEL={api_model}\n')
+                        found_keys.add('OPENAI_MODEL')
+                        updated = True
+                    elif line.startswith('LLM_MODEL_NAME='):
+                        new_lines.append(f'LLM_MODEL_NAME={api_model}\n')
+                        found_keys.add('LLM_MODEL_NAME')
+                        updated = True
+                if not updated:
                     new_lines.append(line + '\n')
             
-            if api_key and 'OPENAI_API_KEY' not in found_keys:
-                new_lines.append(f'OPENAI_API_KEY={api_key}\n')
-            if api_base and 'OPENAI_API_BASE' not in found_keys:
-                new_lines.append(f'OPENAI_API_BASE={api_base}\n')
-            if api_model and 'OPENAI_MODEL' not in found_keys:
-                new_lines.append(f'OPENAI_MODEL={api_model}\n')
+            if api_key:
+                if 'OPENAI_API_KEY' not in found_keys:
+                    new_lines.append(f'OPENAI_API_KEY={api_key}\n')
+                if 'LLM_API_KEY' not in found_keys:
+                    new_lines.append(f'LLM_API_KEY={api_key}\n')
+            if api_base:
+                if 'OPENAI_API_BASE' not in found_keys:
+                    new_lines.append(f'OPENAI_API_BASE={api_base}\n')
+                if 'API_BASE_URL' not in found_keys:
+                    new_lines.append(f'API_BASE_URL={api_base}\n')
+                if 'LLM_BASE_URL' not in found_keys:
+                    new_lines.append(f'LLM_BASE_URL={api_base}\n')
+            if api_model:
+                if 'OPENAI_MODEL' not in found_keys:
+                    new_lines.append(f'OPENAI_MODEL={api_model}\n')
+                if 'LLM_MODEL_NAME' not in found_keys:
+                    new_lines.append(f'LLM_MODEL_NAME={api_model}\n')
             
             with open(env_path, 'w', encoding='utf-8') as f:
                 f.writelines(new_lines)

@@ -48,7 +48,7 @@ class DAGExecutor:
             是否全部执行成功
         """
         # 按照依赖顺序执行节点
-        executed_nodes = set()
+        executed_nodes: set[str] = set()
         
         while len(executed_nodes) < len(self.nodes):
             progress = False

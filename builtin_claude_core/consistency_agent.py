@@ -29,7 +29,7 @@ class ConsistencyAgent:
     def __init__(self):
         self.client = OpenAI(
             api_key=os.getenv("LLM_API_KEY"),
-            base_url=os.getenv("LLM_BASE_URL", "https://api.anthropic.com/v1/")
+            base_url=os.getenv("API_BASE_URL") or os.getenv("LLM_BASE_URL", "https://api.anthropic.com/v1/")
         )
         self.model_name = os.getenv("LLM_MODEL_NAME", "claude-3-5-sonnet-20240620")
         self.pass_score = 80

@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from builtin_claude_core.file_lock import lock_manager
+
 
 @dataclass
 class WorkspaceConfig:
@@ -63,20 +67,21 @@ class ConfigManager:
     def _load_config(self) -> AppConfig:
         if self.config_path.exists():
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    data = yaml.safe_load(f)
-                    # Convert dict workspaces to WorkspaceConfig objects
-                    if 'workspaces' in data:
-                        data['workspaces'] = [WorkspaceConfig(**ws) for ws in data['workspaces']]
-                    # Convert dict models to ModelConfig objects
-                    if 'models' in data:
-                        data['models'] = [ModelConfig(**m) for m in data['models']]
-                    # Convert dict browser to BrowserConfig object
-                    if 'browser' in data and isinstance(data['browser'], dict):
-                        data['browser'] = BrowserConfig(**data['browser'])
-                    else:
-                        data['browser'] = BrowserConfig()
-                    return AppConfig(**data)
+                with lock_manager.with_lock(str(self.config_path)):
+                    with open(self.config_path, 'r', encoding='utf-8') as f:
+                        data = yaml.safe_load(f)
+                        # Convert dict workspaces to WorkspaceConfig objects
+                        if 'workspaces' in data:
+                            data['workspaces'] = [WorkspaceConfig(**ws) for ws in data['workspaces']]
+                        # Convert dict models to ModelConfig objects
+                        if 'models' in data:
+                            data['models'] = [ModelConfig(**m) for m in data['models']]
+                        # Convert dict browser to BrowserConfig object
+                        if 'browser' in data and isinstance(data['browser'], dict):
+                            data['browser'] = BrowserConfig(**data['browser'])
+                        else:
+                            data['browser'] = BrowserConfig()
+                        return AppConfig(**data)
             except Exception as e:
                 print(f"配置加载失败，使用默认配置: {e}")
         return self._create_default_config()
@@ -100,8 +105,9 @@ class ConfigManager:
             "theme": self.config.theme,
             "browser": self.config.browser.__dict__
         }
-        with open(self.config_path, 'w', encoding='utf-8') as f:
-            yaml.dump(data, f, allow_unicode=True)
+        with lock_manager.with_lock(str(self.config_path)):
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(data, f, allow_unicode=True)
 
     def get_active_workspace(self) -> Optional[WorkspaceConfig]:
         for ws in self.config.workspaces:

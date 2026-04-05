@@ -3,6 +3,7 @@
 import os
 import json
 import time
+import asyncio
 from typing import Dict, Any, Optional, Iterator
 from abc import ABC, abstractmethod
 from .logger import logger
@@ -19,6 +20,16 @@ class BaseLLMProvider(ABC):
     @abstractmethod
     def generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
         """流式生成文本"""
+        pass
+    
+    @abstractmethod
+    async def async_generate(self, prompt: str, **kwargs) -> str:
+        """异步生成文本"""
+        pass
+    
+    @abstractmethod
+    async def async_generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        """异步流式生成文本"""
         pass
 
 
@@ -80,6 +91,48 @@ class OpenAIProvider(BaseLLMProvider):
         except Exception as e:
             logger.error(f"❌ OpenAI 流式生成失败: {str(e)}")
             raise
+    
+    async def async_generate(self, prompt: str, **kwargs) -> str:
+        client = self._get_client()
+        max_retries = kwargs.get('max_retries', 3)
+        
+        for attempt in range(max_retries):
+            try:
+                response = await asyncio.to_thread(
+                    client.chat.completions.create,
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=kwargs.get('temperature', 0.7),
+                    max_tokens=kwargs.get('max_tokens', 4000),
+                    timeout=kwargs.get('timeout', 120)
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                logger.warning(f"⚠️ OpenAI 异步调用失败 (尝试 {attempt+1}/{max_retries}): {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    raise
+        
+        return ""
+    
+    async def async_generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        client = self._get_client()
+        try:
+            response = await asyncio.to_thread(
+                client.chat.completions.create,
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=kwargs.get('temperature', 0.7),
+                max_tokens=kwargs.get('max_tokens', 4000),
+                stream=True
+            )
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            logger.error(f"❌ OpenAI 异步流式生成失败: {str(e)}")
+            raise
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -136,6 +189,44 @@ class AnthropicProvider(BaseLLMProvider):
                     yield text
         except Exception as e:
             logger.error(f"❌ Claude 流式生成失败: {str(e)}")
+            raise
+    
+    async def async_generate(self, prompt: str, **kwargs) -> str:
+        client = self._get_client()
+        max_retries = kwargs.get('max_retries', 3)
+        
+        for attempt in range(max_retries):
+            try:
+                response = await asyncio.to_thread(
+                    client.messages.create,
+                    model=self.model,
+                    max_tokens=kwargs.get('max_tokens', 4000),
+                    temperature=kwargs.get('temperature', 0.7),
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return response.content[0].text
+            except Exception as e:
+                logger.warning(f"⚠️ Claude 异步调用失败 (尝试 {attempt+1}/{max_retries}): {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    raise
+        
+        return ""
+    
+    async def async_generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        client = self._get_client()
+        try:
+            with client.messages.stream(
+                model=self.model,
+                max_tokens=kwargs.get('max_tokens', 4000),
+                temperature=kwargs.get('temperature', 0.7),
+                messages=[{"role": "user", "content": prompt}]
+            ) as stream:
+                for text in stream.text_stream:
+                    yield text
+        except Exception as e:
+            logger.error(f"❌ Claude 异步流式生成失败: {str(e)}")
             raise
 
 
@@ -202,6 +293,65 @@ class OllamaProvider(BaseLLMProvider):
                         yield data["response"]
         except Exception as e:
             logger.error(f"❌ Ollama 流式生成失败: {str(e)}")
+            raise
+    
+    async def async_generate(self, prompt: str, **kwargs) -> str:
+        import aiohttp
+        max_retries = kwargs.get('max_retries', 3)
+        
+        for attempt in range(max_retries):
+            try:
+                timeout = aiohttp.ClientTimeout(total=kwargs.get('timeout', 300))
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(
+                        f"{self.base_url}/api/generate",
+                        json={
+                            "model": self.model,
+                            "prompt": prompt,
+                            "stream": False,
+                            "options": {
+                                "temperature": kwargs.get('temperature', 0.7),
+                                "num_predict": kwargs.get('max_tokens', 4000)
+                            }
+                        }
+                    ) as response:
+                        response.raise_for_status()
+                        data = await response.json()
+                        return data.get("response", "")
+            except Exception as e:
+                logger.warning(f"⚠️ Ollama 异步调用失败 (尝试 {attempt+1}/{max_retries}): {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                else:
+                    raise
+        
+        return ""
+    
+    async def async_generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        import aiohttp
+        try:
+            timeout = aiohttp.ClientTimeout(total=kwargs.get('timeout', 300))
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    f"{self.base_url}/api/generate",
+                    json={
+                        "model": self.model,
+                        "prompt": prompt,
+                        "stream": True,
+                        "options": {
+                            "temperature": kwargs.get('temperature', 0.7),
+                            "num_predict": kwargs.get('max_tokens', 4000)
+                        }
+                    }
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.content:
+                        if line:
+                            data = json.loads(line)
+                            if "response" in data:
+                                yield data["response"]
+        except Exception as e:
+            logger.error(f"❌ Ollama 异步流式生成失败: {str(e)}")
             raise
 
 
@@ -317,6 +467,33 @@ class LLMAdapter:
             生成的文本片段
         """
         yield from self.provider.generate_stream(prompt, **kwargs)
+    
+    async def async_generate(self, prompt: str, **kwargs) -> str:
+        """
+        异步生成文本
+        
+        Args:
+            prompt: 提示词
+            **kwargs: 生成参数 (temperature, max_tokens, timeout, max_retries)
+        
+        Returns:
+            生成的文本
+        """
+        return await self.provider.async_generate(prompt, **kwargs)
+    
+    async def async_generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        """
+        异步流式生成文本
+        
+        Args:
+            prompt: 提示词
+            **kwargs: 生成参数
+        
+        Yields:
+            生成的文本片段
+        """
+        async for chunk in self.provider.async_generate_stream(prompt, **kwargs):
+            yield chunk
     
     def switch_provider(self, provider_type: str, **kwargs):
         """切换 LLM 提供者"""

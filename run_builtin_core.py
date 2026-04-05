@@ -8,6 +8,7 @@ import time
 import re
 import argparse
 from datetime import datetime
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -69,7 +70,7 @@ def load_structured_memory(novel_settings_dir: str, chapter_num: int) -> str:
 
 def generate_with_litellm(
     prompt: str,
-    system_prompt: str = None,
+    system_prompt: Optional[str] = None,
     timeout: int = 300,
 ) -> str:
     """

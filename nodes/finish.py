@@ -3,6 +3,10 @@ from typing import Dict, Any
 from nodes.base import BaseNode
 from models.dag import DAGPipeline, NodeStatus
 from utils.logger import Logger
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from builtin_claude_core.file_lock import lock_manager
 
 def finish_node(node_id: str, node_name: str, pipeline: DAGPipeline, context: Dict[str, Any], logger: Logger) -> bool:
     """全链路闭环节点 - 无状态纯函数版本"""
@@ -17,8 +21,9 @@ def finish_node(node_id: str, node_name: str, pipeline: DAGPipeline, context: Di
         chapter_num_file = os.path.expanduser("~/OpenMars_Arch/current_chapter.txt")
         # 确保目录存在
         os.makedirs(os.path.dirname(chapter_num_file), exist_ok=True)
-        with open(chapter_num_file, "w") as f:
-            f.write(str(next_chapter))
+        with lock_manager.with_lock(chapter_num_file):
+            with open(chapter_num_file, "w") as f:
+                f.write(str(next_chapter))
         
         pipeline.nodes[node_id].status = NodeStatus.SUCCESS
         logger.write(f"✅ [{node_name}] 全流程闭环完成！下一章章节号已自动更新")

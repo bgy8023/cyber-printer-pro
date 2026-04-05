@@ -10,7 +10,7 @@ from .memory_palace import MemoryPalace
 
 # 一致性校验器
 from .consistency_checker import HardRuleConsistencyChecker, ConsistencyCheckResult
-from .consistency_agent import ConsistencyAgent
+from .consistency_agent import ConsistencyAgent, get_consistency_agent
 
 # LLM 适配器
 from .llm_adapter import LLMAdapter, get_llm_adapter, reset_llm_adapter
@@ -36,6 +36,28 @@ from .kairos_daemon import KairosDaemon
 # 日志
 from .logger import logger
 
+# 语义记忆系统
+from .semantic_memory import SemanticMemory, semantic_memory
+
+# 钩子系统
+from .hooks import HookType, HookManager, hook_manager
+from .hooks_simple import SimpleHookType, SimpleHookManager
+
+# 技能管理
+from .skill_manager import WritingSkill, SkillManager, skill_manager
+
+# Agent团队
+from .agent_teams import (
+    BaseAgent,
+    OutlineAgent,
+    WriterAgent,
+    ReviewAgent,
+    PolishAgent,
+    ForeshadowAgent,
+    WritingTeam,
+    get_writing_team
+)
+
 # 全部导出
 __all__ = [
     "ClaudeQueryEngine",
@@ -47,6 +69,7 @@ __all__ = [
     "HardRuleConsistencyChecker",
     "ConsistencyCheckResult",
     "ConsistencyAgent",
+    "get_consistency_agent",
     "LLMAdapter",
     "get_llm_adapter",
     "reset_llm_adapter",
@@ -60,4 +83,22 @@ __all__ = [
     "get_autodream",
     "KairosDaemon",
     "logger",
+    "SemanticMemory",
+    "semantic_memory",
+    "HookType",
+    "HookManager",
+    "hook_manager",
+    "SimpleHookType",
+    "SimpleHookManager",
+    "WritingSkill",
+    "SkillManager",
+    "skill_manager",
+    "BaseAgent",
+    "OutlineAgent",
+    "WriterAgent",
+    "ReviewAgent",
+    "PolishAgent",
+    "ForeshadowAgent",
+    "WritingTeam",
+    "get_writing_team",
 ]

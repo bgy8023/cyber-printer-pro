@@ -42,11 +42,12 @@ def humanizer_process_node(node_id: str, node_name: str, pipeline: DAGPipeline, 
         )
         
         humanized_content = ""
-        for line in process.stdout:
-            if line.strip() and not line.strip().startswith("[") and not line.strip().startswith("✅") and not line.strip().startswith("⚠️") and not line.strip().startswith("❌"):
-                humanized_content += line + "\n"
-            if line.strip():
-                logger.write(f"[Humanizer] {line.strip()}")
+        if process.stdout is not None:
+            for line in process.stdout:
+                if line.strip() and not line.strip().startswith("[") and not line.strip().startswith("✅") and not line.strip().startswith("⚠️") and not line.strip().startswith("❌"):
+                    humanized_content += line + "\n"
+                if line.strip():
+                    logger.write(f"[Humanizer] {line.strip()}")
         
         process.wait(timeout=180)
         if process.returncode != 0:

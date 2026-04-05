@@ -6,6 +6,10 @@ from typing import Dict, Any, Optional, List
 from models.dag import DAGPipeline, DAGNode, NodeStatus
 from state.manager import StateManager
 from utils.helpers import get_resource_path, check_daemon_status, get_clawpanel_agents, get_agent_skills
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from builtin_claude_core.file_lock import lock_manager
 
 
 def _get_node_state_hash(node: DAGNode) -> str:
@@ -99,8 +103,9 @@ def render_metrics():
     chapter_num_file = os.path.expanduser("~/OpenMars_Arch/current_chapter.txt")
     current_chapter = "1"
     if os.path.exists(chapter_num_file):
-        with open(chapter_num_file, "r") as f:
-            current_chapter = f.read().strip() or "1"
+        with lock_manager.with_lock(chapter_num_file):
+            with open(chapter_num_file, "r") as f:
+                current_chapter = f.read().strip() or "1"
     
     with col1:
         st.markdown("""
@@ -250,8 +255,9 @@ def render_main_panel_improved(state: StateManager):
                 
                 if selected_file != "-- 选择文件 --":
                     file_path = os.path.join(output_dir, selected_file)
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
+                    with lock_manager.with_lock(file_path):
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
                     with st.expander("📖 查看内容"):
                         st.markdown(content)
             else:

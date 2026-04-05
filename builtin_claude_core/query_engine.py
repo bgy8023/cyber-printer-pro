@@ -762,7 +762,7 @@ class AsyncQueryEngine:
         max_retries: int = None
     ):
         self.api_key = api_key or os.getenv("LLM_API_KEY")
-        self.base_url = base_url or os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
+        self.base_url = base_url or os.getenv("API_BASE_URL") or os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
         self.model_name = model_name or os.getenv("LLM_MODEL_NAME", "gpt-4o")
         self.timeout = timeout or int(os.getenv("LLM_TIMEOUT", "300"))
         self.temperature = temperature or float(os.getenv("LLM_TEMPERATURE", "0.7"))

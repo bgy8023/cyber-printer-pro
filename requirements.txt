@@ -17,3 +17,8 @@ pandas>=2.0.0
 requests>=2.31.0
 # 跨进程文件锁
 filelock>=3.13.0
+# LLM API客户端
+openai>=1.0.0
+anthropic>=0.25.0
+# Notion客户端
+notion-client>=2.0.0

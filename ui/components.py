@@ -6,6 +6,10 @@ from typing import Dict, Any, Optional, List
 from models.dag import DAGPipeline, DAGNode, NodeStatus
 from state.manager import StateManager
 from utils.helpers import get_resource_path, check_daemon_status, get_clawpanel_agents, get_agent_skills
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from builtin_claude_core.file_lock import lock_manager
 
 def _get_node_state_hash(node: DAGNode) -> str:
     """计算节点状态的哈希值，用于判断是否需要更新
@@ -72,8 +76,9 @@ def render_daemon_panel(state: StateManager):
     with col_daemon2:
         chapter_num_file = os.path.expanduser("~/OpenMars_Arch/current_chapter.txt")
         if os.path.exists(chapter_num_file):
-            with open(chapter_num_file, "r") as f:
-                current_chapter_daemon = f.read().strip()
+            with lock_manager.with_lock(chapter_num_file):
+                with open(chapter_num_file, "r") as f:
+                    current_chapter_daemon = f.read().strip()
             st.info(f"📊 当前守护进程章节号：第{current_chapter_daemon}章 | 日志路径：~/OpenMars_Arch/kairos_daemon.log")
         else:
             st.info("📊 守护进程章节号未初始化，首次生成后自动同步")
@@ -225,8 +230,9 @@ def render_history_tab():
         chapter_path = os.path.join(output_path, chapter_file)
         
         with st.expander(f"📄 {chapter_file}", expanded=False):
-            with open(chapter_path, "r", encoding="utf-8") as f:
-                content = f.read()
+            with lock_manager.with_lock(chapter_path):
+                with open(chapter_path, "r", encoding="utf-8") as f:
+                    content = f.read()
             
             st.markdown(content)
             
@@ -270,12 +276,15 @@ def render_tabs(state: StateManager, log_placeholder):
         
         if setting_files:
             selected_file = st.selectbox("选择设定文件进行查看/微调", options=setting_files)
-            with open(os.path.join(setting_path, selected_file), "r", encoding="utf-8") as f:
-                file_content = f.read()
+            file_path = os.path.join(setting_path, selected_file)
+            with lock_manager.with_lock(file_path):
+                with open(file_path, "r", encoding="utf-8") as f:
+                    file_content = f.read()
             edit_content = st.text_area(f"内容：{selected_file}", value=file_content, height=300)
             if st.button("💾 保存微调", type="primary"):
-                with open(os.path.join(setting_path, selected_file), "w", encoding="utf-8") as f:
-                    f.write(edit_content)
+                with lock_manager.with_lock(file_path):
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(edit_content)
                 st.success("✅ 修改已保存生效！")
         else:
             st.info("⚠️ 记忆宫殿空空如也，请重新运行部署脚本！")
@@ -295,8 +304,10 @@ def render_tabs(state: StateManager, log_placeholder):
         if logs:
             _render_paginated_logs(logs)
         elif os.path.exists(get_resource_path("system.log")):
-            with open(get_resource_path("system.log"), "r", encoding="utf-8") as f:
-                lines = f.readlines()[-100:]
+            log_path = get_resource_path("system.log")
+            with lock_manager.with_lock(log_path):
+                with open(log_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()[-100:]
             if lines:
                 _render_paginated_logs(lines)
             else:

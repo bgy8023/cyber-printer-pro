@@ -7,6 +7,9 @@ import json
 import subprocess
 from dotenv import load_dotenv
 from typing import Tuple, List, Optional, Dict, Any
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from builtin_claude_core.file_lock import lock_manager
 
 # 全局路径变量
 OPENMARS_CONFIG_PATH = os.path.expanduser("~/.openmars")
@@ -76,7 +79,7 @@ def get_resource_path(relative_path: str) -> str:
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.abspath("."), relative_path)
 
-def reload_env() -> Tuple[str, str, str, str]:
+def reload_env() -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     """重载环境变量
     
     Returns:
@@ -140,10 +143,11 @@ def get_mcp_servers() -> List[str]:
         mcp_servers = []
         mcp_config_file = os.path.join(OPENMARS_CONFIG_PATH, "mcp_config.json")
         if os.path.exists(mcp_config_file):
-            with open(mcp_config_file, "r", encoding="utf-8") as f:
-                config = json.load(f)
-                if "mcpServers" in config:
-                    mcp_servers = list(config["mcpServers"].keys())
+            with lock_manager.with_lock(mcp_config_file):
+                with open(mcp_config_file, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                    if "mcpServers" in config:
+                        mcp_servers = list(config["mcpServers"].keys())
         return mcp_servers
     except:
         return []
@@ -177,9 +181,11 @@ def get_lazy_prompt(enable_mcp: bool, mcp_servers: List[str], enable_xcrawl: boo
     setting_files = sorted([f for f in os.listdir(setting_path) if f.endswith(".md")])
     full_setting = ""
     for file in setting_files:
-        with open(os.path.join(setting_path, file), "r", encoding="utf-8") as f:
-            content = f.read()
-            full_setting += f"【{file}】\n{content}\n\n"
+        file_path = os.path.join(setting_path, file)
+        with lock_manager.with_lock(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                full_setting += f"【{file}】\n{content}\n\n"
     
     tool_prompt = ""
     if enable_mcp and mcp_servers:
@@ -260,8 +266,9 @@ def extract_latest_novel_from_output() -> Optional[str]:
         if not md_files:
             return None
         md_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-        with open(md_files[0], "r", encoding="utf-8") as f:
-            content = f.read()
+        with lock_manager.with_lock(md_files[0]):
+            with open(md_files[0], "r", encoding="utf-8") as f:
+                content = f.read()
         return content
     except:
         return None
@@ -280,8 +287,9 @@ def auto_update_plot_record(chapter_content: str, chapter_num: int) -> bool:
         setting_path = get_resource_path("novel_settings")
         plot_file = os.path.join(setting_path, "2_剧情自动推演记录.md")
         if not os.path.exists(plot_file):
-            with open(plot_file, "w", encoding="utf-8") as f:
-                f.write("# 剧情备忘录（AI必须严格遵守）\n")
+            with lock_manager.with_lock(plot_file):
+                with open(plot_file, "w", encoding="utf-8") as f:
+                    f.write("# 剧情备忘录（AI必须严格遵守）\n")
         prompt = f"提取本章核心剧情、新出场人物、新增伏笔、核心人设变化，以列表格式输出，结构化存储，用于后续防吃书。章节内容：{chapter_content[:2000]}..."
         gen_script_path = get_resource_path("run_openmars.sh")
         result = subprocess.run(
@@ -290,8 +298,9 @@ def auto_update_plot_record(chapter_content: str, chapter_num: int) -> bool:
             text=True,
             encoding="utf-8"
         )
-        with open(plot_file, "a", encoding="utf-8") as f:
-            f.write(f"\n\n## 第{chapter_num}章\n{result.stdout}")
+        with lock_manager.with_lock(plot_file):
+            with open(plot_file, "a", encoding="utf-8") as f:
+                f.write(f"\n\n## 第{chapter_num}章\n{result.stdout}")
         return True
     except:
         return True

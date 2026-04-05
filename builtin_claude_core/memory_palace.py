@@ -6,6 +6,7 @@ import json
 import re
 from typing import Dict, List, Optional, Any
 from .logger import logger
+from .file_lock import lock_manager
 
 
 class MemoryPalace:
@@ -216,6 +217,16 @@ class MemoryPalace:
         
         return "\n".join(prompt_parts)
     
+    def get_full_prompt(self) -> str:
+        """获取完整的记忆提示词（固定记忆 + 动态记忆）"""
+        prompt_parts = []
+        
+        prompt_parts.append(self.get_full_fixed_prompt())
+        prompt_parts.append(self.get_previous_plot_summary(max_chapters=5))
+        prompt_parts.append(self.get_unresolved_foreshadowing_prompt())
+        
+        return "\n\n".join(prompt_parts)
+    
     # ========== 兼容原有接口 ==========
     
     def load_memory(self, memory_dir: str):
@@ -317,15 +328,17 @@ class MemoryPalace:
         
         # 保存固定记忆（始终保存）
         fixed_path = os.path.join(self.memory_dir, "fixed_memory.json")
-        with open(fixed_path, "w", encoding="utf-8") as f:
-            json.dump(self.fixed_memory, f, ensure_ascii=False, indent=2)
+        with lock_manager.with_lock(fixed_path):
+            with open(fixed_path, "w", encoding="utf-8") as f:
+                json.dump(self.fixed_memory, f, ensure_ascii=False, indent=2)
         logger.info("✅ 固定记忆已保存")
         
         # 保存动态记忆（仅当有内容时）
         if self.dynamic_memory["chapters"] or self.dynamic_memory["foreshadowing"] or self.dynamic_memory["plot_nodes"]:
             dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
-            with open(dynamic_path, "w", encoding="utf-8") as f:
-                json.dump(self.dynamic_memory, f, ensure_ascii=False, indent=2)
+            with lock_manager.with_lock(dynamic_path):
+                with open(dynamic_path, "w", encoding="utf-8") as f:
+                    json.dump(self.dynamic_memory, f, ensure_ascii=False, indent=2)
             logger.info("✅ 动态记忆已保存")
         else:
             self.clear_temp_files()
@@ -347,8 +360,9 @@ class MemoryPalace:
         fixed_path = os.path.join(self.memory_dir, "fixed_memory.json")
         if os.path.exists(fixed_path):
             try:
-                with open(fixed_path, "r", encoding="utf-8") as f:
-                    loaded_memory = json.load(f)
+                with lock_manager.with_lock(fixed_path):
+                    with open(fixed_path, "r", encoding="utf-8") as f:
+                        loaded_memory = json.load(f)
                 # 验证加载的数据结构
                 if isinstance(loaded_memory, dict) and all(key in loaded_memory for key in ["characters", "world_setting", "full_outline", "chapter_outlines"]):
                     self.fixed_memory = loaded_memory
@@ -367,8 +381,9 @@ class MemoryPalace:
             dynamic_path = os.path.join(self.memory_dir, "dynamic_memory.json")
             if os.path.exists(dynamic_path):
                 try:
-                    with open(dynamic_path, "r", encoding="utf-8") as f:
-                        loaded_memory = json.load(f)
+                    with lock_manager.with_lock(dynamic_path):
+                        with open(dynamic_path, "r", encoding="utf-8") as f:
+                            loaded_memory = json.load(f)
                     # 验证加载的数据结构
                     if isinstance(loaded_memory, dict) and all(key in loaded_memory for key in ["chapters", "foreshadowing", "plot_nodes", "current_chapter"]):
                         self.dynamic_memory = loaded_memory

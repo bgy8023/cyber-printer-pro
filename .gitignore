@@ -40,6 +40,7 @@ logs/
 system.log
 panel.log
 nohup.out
+system_*.log
 
 # IDE
 .vscode/
@@ -89,3 +90,27 @@ novel_settings/custom_models.json
 *_bak_*.py
 *_bak_*.command
 *_backup.*
+backup_*/
+
+# 测试文件
+test_*.py
+
+# 外部项目
+OpenHarness/
+
+# 临时目录
+05_Tech_Laboratory/
+
+# 启动命令
+*.command
+
+# 运行脚本
+run_full_pipeline.py
+test_*.py
+run_builtin_core_mock.py
+cyber_harness.py
+start_ultimate.command
+test_cyber_harness.py
+test_novel_tools.py
+test_simple.py
+test_skill_loader.py

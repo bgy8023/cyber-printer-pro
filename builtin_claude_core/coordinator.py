@@ -10,17 +10,19 @@ class Coordinator:
     - 根据任务需求自动调整
     - 支持任务优先级和依赖关系
     """
-    def __init__(self, max_workers: Optional[int] = None):
+    def __init__(self, max_workers: Optional[int] = None, llm_adapter=None):
         """
         初始化协调器
         
         Args:
             max_workers: 最大并行数，None则自动计算
+            llm_adapter: LLM适配器实例，用于实际执行任务
         """
         if max_workers is None:
             max_workers = self._calculate_optimal_workers()
         
         self.max_workers = max_workers
+        self.llm_adapter = llm_adapter
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         logger.info(f"🤖 Coordinator 初始化完成，动态并行度：{max_workers}")
     
@@ -116,8 +118,8 @@ class Coordinator:
         - 处理依赖关系
         - 动态调整并行度
         """
-        results = {}
-        completed_tasks = set()
+        results: Dict[str, str] = {}
+        completed_tasks: set[str] = set()
         
         sorted_tasks = sorted(task_config, key=lambda x: x["priority"])
         
@@ -170,9 +172,24 @@ class Coordinator:
         return "\n".join(parts)
     
     def _run_task(self, title: str, prompt: str) -> str:
-        """执行单个任务（占位实现）"""
+        """执行单个任务"""
         logger.info(f"🚀 执行任务：{title}")
-        return f"{title} 已完成（DeerFlow 2.0 动态并行生成）"
+        
+        if self.llm_adapter:
+            try:
+                result = self.llm_adapter.generate(
+                    prompt=prompt,
+                    temperature=0.7,
+                    max_tokens=1000
+                )
+                logger.info(f"✅ 任务 {title} 执行完成")
+                return result
+            except Exception as e:
+                logger.error(f"❌ 任务 {title} 调用 LLM 失败：{str(e)}", exc_info=True)
+                logger.warning(f"⚠️  任务 {title} 回退到占位实现")
+        
+        logger.warning(f"⚠️  任务 {title} 使用占位实现（未配置 LLM 适配器）")
+        return f"{title} 已完成（DeerFlow 2.0 动态并行生成）\n\n任务说明：{prompt}"
     
     def shutdown(self, wait: bool = True):
         """关闭协调器，释放资源"""
