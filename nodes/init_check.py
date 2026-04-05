@@ -15,7 +15,7 @@ def init_check_node(node_id: str, node_name: str, pipeline: DAGPipeline, context
     try:
         notion_token, notion_db_id, github_token, github_repo = reload_env()
         
-        gen_script_path = get_resource_path("run_openmars.sh")
+        gen_script_path = get_resource_path("run_builtin_core.py")
         if not gen_script_path or not os.path.exists(gen_script_path):
             raise Exception(f"生成脚本不存在：{gen_script_path}")
         

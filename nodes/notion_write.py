@@ -7,8 +7,11 @@ from utils.helpers import count_real_chars
 
 def _get_notion_client(token: str):
     """获取Notion客户端 - 辅助函数"""
-    from notion_client import Client
-    return Client(auth=token)
+    try:
+        from notion_client import Client
+        return Client(auth=token)
+    except ImportError:
+        raise Exception("notion_client 模块未安装")
 
 def notion_write_node(node_id: str, node_name: str, pipeline: DAGPipeline, context: Dict[str, Any], logger: Logger) -> bool:
     """Notion分发对账节点 - 无状态纯函数版本"""
@@ -23,6 +26,20 @@ def notion_write_node(node_id: str, node_name: str, pipeline: DAGPipeline, conte
         real_chars = context.get("real_chars", 0)
         notion_token = context.get("notion_token", "")
         notion_db_id = context.get("notion_db_id", "")
+        
+        # 先尝试导入 notion_client，如果失败直接跳过
+        try:
+            from notion_client import Client
+        except ImportError:
+            logger.write(f"⚠️ [{node_name}] notion_client未安装，跳过分发")
+            pipeline.nodes[node_id].status = NodeStatus.SUCCESS
+            return True
+        
+        # 如果没有配置 Notion Token 或 DB ID，直接跳过
+        if not notion_token or not notion_db_id or notion_token == "你的_Notion_Integration_Token":
+            logger.write(f"⚠️ [{node_name}] 未配置Notion，跳过分发")
+            pipeline.nodes[node_id].status = NodeStatus.SUCCESS
+            return True
         
         final_chars = count_real_chars(content)
         

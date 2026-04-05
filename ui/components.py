@@ -175,11 +175,13 @@ def render_main_panel(state: StateManager):
             
             st.markdown("---")
             st.subheader("🔧 核心功能开关")
+            enable_openharness = st.checkbox("🚀 使用 OpenHarness 增强引擎（Beta）", value=False)
             enable_multi_agent = st.checkbox("多智能体协调模式（网文工作室）", value=True)
             enable_undercover = st.checkbox("Undercover卧底模式（原生反AI）", value=True)
             enable_mcp = st.checkbox("MCP跨维工具（联网搜索）", value=True)
             enable_xcrawl = st.checkbox("xcrawl全网吞噬技能（深度爬取）", value=True)
             enable_humanizer = st.checkbox("Humanizer二次去AI化（过审保障）", value=True)
+            enable_skills = st.checkbox("🎯 网文创作专属技能增强", value=True)
 
         with col_lazy2:
             custom_prompt = st.text_area(
@@ -195,9 +197,9 @@ def render_main_panel(state: StateManager):
     st.markdown("---")
     
     return (
-        chapter_num, target_words, target_agent, enable_multi_agent, 
+        chapter_num, target_words, target_agent, enable_openharness, enable_multi_agent, 
         enable_undercover, enable_mcp, enable_xcrawl, 
-        enable_humanizer, custom_prompt, lazy_btn
+        enable_humanizer, enable_skills, custom_prompt, lazy_btn
     )
 
 def render_history_tab():

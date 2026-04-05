@@ -19,6 +19,12 @@ def github_archive_node(node_id: str, node_name: str, pipeline: DAGPipeline, con
         github_token = context.get("github_token", "")
         github_repo = context.get("github_repo", "")
         
+        # 如果没有配置 GitHub Token 或 Repo，直接跳过
+        if not github_token or not github_repo or github_token == "你的_GitHub_Personal_Access_Token":
+            logger.write(f"⚠️ [{node_name}] 未配置GitHub，跳过归档")
+            pipeline.nodes[node_id].status = NodeStatus.SUCCESS
+            return True
+        
         filename = f"{chapter_title}_{datetime.now().strftime('%Y%m%d%H%M')}.md"
         
         url = f"https://api.github.com/repos/{github_repo}/contents/novels/{filename}"

@@ -1,6 +1,7 @@
 import os
 import sys
 import subprocess
+import asyncio
 from typing import Dict, Any
 from nodes.base import BaseNode
 from models.dag import DAGPipeline, NodeStatus
@@ -11,7 +12,9 @@ def generate_content_node(node_id: str, node_name: str, pipeline: DAGPipeline, c
     """多智能体创作节点 - 无状态纯函数版本"""
     pipeline.nodes[node_id].status = NodeStatus.RUNNING
     enable_multi_agent = context.get("enable_multi_agent", False)
-    logger.write(f"🤖 [{node_name}] 开始多智能体创作（多Agent：{'已激活' if enable_multi_agent else '未激活'}")
+    enable_openharness = context.get("enable_openharness", False)
+    enable_skills = context.get("enable_skills", True)
+    logger.write(f"🤖 [{node_name}] 开始多智能体创作（多Agent：{'已激活' if enable_multi_agent else '未激活'} | OpenHarness：{'已激活' if enable_openharness else '未激活'} | 技能增强：{'已激活' if enable_skills else '未激活'}")
     
     try:
         chapter_num = context.get("chapter_num", 1)
@@ -21,32 +24,66 @@ def generate_content_node(node_id: str, node_name: str, pipeline: DAGPipeline, c
         target_agent = context.get("target_agent", "default")
         enable_humanizer = context.get("enable_humanizer", False)
         
-        gen_script_path = get_resource_path("run_openmars.sh")
-        if gen_script_path and os.path.exists(gen_script_path):
-            env = os.environ.copy()
-            if hasattr(sys, '_MEIPASS'):
-                env["APP_BUILTIN_RESOURCES"] = sys._MEIPASS
-            
-            process = subprocess.Popen(
-                [gen_script_path, str(chapter_num), final_prompt, str(target_words), target_agent, "false", "true" if enable_multi_agent else "false"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                bufsize=1,
-                universal_newlines=True,
-                env=env
-            )
-            
-            for line in process.stdout:
-                if line.strip():
-                    logger.write(f"[Claude Core] {line.strip()}")
-            
-            process.wait(timeout=300)
-            if process.returncode not in [0, 124]:
-                raise Exception(f"生成脚本执行失败，返回码：{process.returncode}")
-        else:
-            raise Exception("未找到生成脚本")
+        if enable_openharness:
+            logger.write(f"🚀 [{node_name}] 使用 OpenHarness 增强引擎...")
+            try:
+                from cyber_harness import get_cyber_harness
+                
+                harness = get_cyber_harness(use_openharness=True)
+                
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    generated_content = loop.run_until_complete(
+                        harness.generate_content(
+                            prompt=final_prompt,
+                            target_words=target_words,
+                            chapter_num=chapter_num
+                        )
+                    )
+                finally:
+                    loop.close()
+                
+                logger.write(f"✅ [{node_name}] OpenHarness 生成完成")
+                
+                from utils.helpers import ensure_output_dir
+                output_dir = ensure_output_dir()
+                output_file = os.path.join(output_dir, f"{chapter_title}_{chapter_num:03d}.md")
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write(generated_content)
+                logger.write(f"📝 [{node_name}] 已保存到：{output_file}")
+                
+            except Exception as oh_error:
+                logger.write(f"⚠️ [{node_name}] OpenHarness 失败，回退到内置核心：{str(oh_error)}")
+                enable_openharness = False
+        
+        if not enable_openharness:
+            gen_script_path = get_resource_path("run_builtin_core.py")
+            if gen_script_path and os.path.exists(gen_script_path):
+                env = os.environ.copy()
+                if hasattr(sys, '_MEIPASS'):
+                    env["APP_BUILTIN_RESOURCES"] = sys._MEIPASS
+                
+                process = subprocess.Popen(
+                    [sys.executable, gen_script_path, str(chapter_num), final_prompt, str(target_words), target_agent, "true" if enable_humanizer else "false", "true" if enable_multi_agent else "false", "true" if enable_skills else "false"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    bufsize=1,
+                    universal_newlines=True,
+                    env=env
+                )
+                
+                for line in process.stdout:
+                    if line.strip():
+                        logger.write(f"[Builtin Core] {line.strip()}")
+                
+                process.wait(timeout=600)
+                if process.returncode not in [0, 124]:
+                    raise Exception(f"生成脚本执行失败，返回码：{process.returncode}")
+            else:
+                raise Exception("未找到生成脚本 run_builtin_core.py")
         
         logger.write(f"📂 [{node_name}] 正在从输出目录提取小说正文...")
         generated_content = extract_latest_novel_from_output()
