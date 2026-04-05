@@ -144,6 +144,11 @@ from security_guard import (
     execute_shell_command,
     PROJECT_ROOT as SG_PROJECT_ROOT
 )
+from ai_tools import (
+    parse_tool_call,
+    execute_tool,
+    get_system_prompt_with_tools
+)
 
 def init_session_state():
     """初始化 session_state"""
@@ -1148,33 +1153,73 @@ if prompt := st.chat_input("输入消息、命令或自然语言（/help 查看�
             
             context_info = build_context_info()
             
-            enhanced_prompt = f"""当前上下文：
-{context_info}
-
-用户问题：{prompt}
-
-请根据上下文信息，专业地回答用户的问题。如果需要更多信息，请礼貌地询问用户。
-"""
+            # 使用带工具的系统提示词
+            system_prompt = get_system_prompt_with_tools()
             
-            messages = []
-            for msg in st.session_state.chat_messages[-8:]:
-                messages.append({
-                    "role": msg["role"],
-                    "content": mask_sensitive_info(msg["content"])
-                })
+            max_iterations = 5
+            iteration = 0
+            final_response = None
             
-            with st.spinner("思考中..."):
-                response_content = adapter.generate(
-                    prompt=enhanced_prompt,
-                    system_prompt=st.session_state.system_prompt,
-                    temperature=st.session_state.model_config['temperature']
-                )
+            while iteration < max_iterations:
+                iteration += 1
+                
+                messages = []
+                for msg in st.session_state.chat_messages[-12:]:
+                    messages.append({
+                        "role": msg["role"],
+                        "content": mask_sensitive_info(msg["content"])
+                    })
+                
+                with st.spinner(f"思考中... (第 {iteration} 轮)"):
+                    response_content = adapter.generate(
+                        prompt=prompt if iteration == 1 else "",
+                        system_prompt=system_prompt,
+                        temperature=st.session_state.model_config['temperature']
+                    )
+                
+                # 检查是否是工具调用
+                tool_call = parse_tool_call(response_content)
+                
+                if tool_call:
+                    tool_name, tool_params = tool_call
+                    
+                    # 显示工具调用给用户
+                    tool_message = f"🔧 **调用工具**: {tool_name}\n```json\n{json.dumps(tool_params, ensure_ascii=False, indent=2)}\n```"
+                    st.session_state.chat_messages.append({"role": "assistant", "content": tool_message})
+                    with chat_container:
+                        with st.chat_message("assistant"):
+                            st.markdown(tool_message)
+                    
+                    # 执行工具
+                    with st.spinner(f"执行工具: {tool_name}..."):
+                        tool_result = execute_tool(tool_name, tool_params)
+                    
+                    # 添加工具结果
+                    result_message = f"📋 **工具结果**:\n```\n{tool_result}\n```"
+                    st.session_state.chat_messages.append({"role": "user", "content": f"[工具结果] {tool_result}"})
+                    with chat_container:
+                        with st.chat_message("user"):
+                            st.code(tool_result)
+                    
+                    save_current_chat()
+                    
+                    # 继续下一轮
+                    continue
+                else:
+                    # 没有工具调用了，这就是最终回复
+                    final_response = response_content
+                    break
             
-            st.session_state.chat_messages.append({"role": "assistant", "content": response_content})
-            
-            with chat_container:
-                with st.chat_message("assistant"):
-                    st.markdown(response_content)
+            if final_response:
+                st.session_state.chat_messages.append({"role": "assistant", "content": final_response})
+                with chat_container:
+                    with st.chat_message("assistant"):
+                        st.markdown(final_response)
+            else:
+                st.session_state.chat_messages.append({"role": "assistant", "content": "抱歉，处理超时了，请再试一次。"})
+                with chat_container:
+                    with st.chat_message("assistant"):
+                        st.warning("抱歉，处理超时了，请再试一次。")
         
         except Exception as e:
             error_msg = f"抱歉，发生错误：{str(e)}"
