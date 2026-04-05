@@ -55,6 +55,7 @@ class AppConfig:
     current_workspace: str = "default"
     theme: str = "dark"
     browser: BrowserConfig = field(default_factory=BrowserConfig)
+    ai_assistant_mode: str = "safe"
 
 
 class ConfigManager:
@@ -103,7 +104,8 @@ class ConfigManager:
             "models": [m.__dict__ for m in self.config.models],
             "current_workspace": self.config.current_workspace,
             "theme": self.config.theme,
-            "browser": self.config.browser.__dict__
+            "browser": self.config.browser.__dict__,
+            "ai_assistant_mode": self.config.ai_assistant_mode
         }
         with lock_manager.with_lock(str(self.config_path)):
             with open(self.config_path, 'w', encoding='utf-8') as f:
@@ -149,4 +151,14 @@ class ConfigManager:
             if hasattr(self.config.browser, key):
                 setattr(self.config.browser, key, value)
         self.save_config()
+
+    def get_ai_assistant_mode(self) -> str:
+        return self.config.ai_assistant_mode
+
+    def set_ai_assistant_mode(self, mode: str):
+        if mode in ["safe", "unlimited"]:
+            self.config.ai_assistant_mode = mode
+            self.save_config()
+        else:
+            raise ValueError(f"Invalid mode: {mode}. Must be 'safe' or 'unlimited'")
 

@@ -138,6 +138,10 @@ from security_guard import (
     safe_write_file,
     safe_delete_file,
     get_security_status,
+    get_mode,
+    set_mode,
+    is_unlimited_mode,
+    execute_shell_command,
     PROJECT_ROOT as SG_PROJECT_ROOT
 )
 
@@ -166,6 +170,8 @@ def init_session_state():
         st.session_state.file_content = None
     if 'active_tool' not in st.session_state:
         st.session_state.active_tool = 'chat'
+    if 'show_unlimited_warning' not in st.session_state:
+        st.session_state.show_unlimited_warning = False
     if 'system_prompt' not in st.session_state:
         st.session_state.system_prompt = """你是赛博印钞机 Pro 的工业级 AI 项目管家，一个功能强大、安全可靠的 AI 助手。
 
@@ -330,6 +336,15 @@ def handle_command(cmd: str) -> str:
     if cmd == '/help' or cmd == '帮助':
         return """**🤖 工业级 AI 项目管家 - 完整命令**
 
+**🎯 模式切换：**
+- `/mode` - 查看当前模式和说明
+- 在侧边栏切换安全/全能模式
+
+**🔓 全能模式（仅全能模式可用）：**
+- `/shell <command>` - 执行 Shell 命令
+- `/pip <command>` - 执行 pip 命令（如 /pip install requests）
+- `/git <command>` - 执行 Git 命令（如 /git status）
+
 **🎯 8 个核心场景：**
 1. `/scene analyze` - 分析项目结构 & 代码审查
 2. `/scene bugfix` - 自动修复代码 Bug
@@ -377,16 +392,102 @@ def handle_command(cmd: str) -> str:
         save_current_chat()
         return "✅ 对话已清空！"
     
+    elif cmd == '/mode':
+        current_mode = get_mode()
+        is_unlimited = is_unlimited_mode()
+        if is_unlimited:
+            mode_info = """**🔓 全能模式**
+
+当前模式：**全能模式**
+
+✅ 可以执行任意 Shell 命令
+✅ 可以读写任意文件（包括系统文件）
+✅ 可以安装任意依赖
+✅ 可以操作任意 Git 仓库
+
+⚠️ **警告**：请谨慎使用！"""
+        else:
+            mode_info = """**🛡️ 安全模式**
+
+当前模式：**安全模式**
+
+✅ 只能访问项目目录
+✅ 只能操作安全扩展名的文件
+✅ 所有修改都会备份
+✅ 敏感操作需要确认
+
+**切换到全能模式**：在侧边栏点击「🔓 全能模式」"""
+        return mode_info
+    
+    elif cmd.startswith('/shell'):
+        parts = cmd.split(maxsplit=1)
+        if len(parts) < 2:
+            return "⚠️ 请指定要执行的命令，例如：`/shell ls -la`"
+        
+        shell_command = parts[1]
+        success, stdout, stderr = execute_shell_command(shell_command)
+        
+        if success:
+            result_parts = []
+            result_parts.append("✅ **Shell 命令执行成功**")
+            if stdout.strip():
+                result_parts.append(f"\n**标准输出：**\n```\n{stdout}\n```")
+            if stderr.strip():
+                result_parts.append(f"\n**标准错误：**\n```\n{stderr}\n```")
+            return "\n".join(result_parts)
+        else:
+            return f"❌ **Shell 命令执行失败**\n\n{stderr}"
+    
+    elif cmd.startswith('/pip'):
+        parts = cmd.split(maxsplit=1)
+        if len(parts) < 2:
+            return "⚠️ 请指定 pip 命令，例如：`/pip install requests`"
+        
+        pip_command = f"pip {parts[1]}"
+        success, stdout, stderr = execute_shell_command(pip_command)
+        
+        if success:
+            result_parts = []
+            result_parts.append("✅ **pip 命令执行成功**")
+            if stdout.strip():
+                result_parts.append(f"\n**输出：**\n```\n{stdout}\n```")
+            if stderr.strip():
+                result_parts.append(f"\n**警告/错误：**\n```\n{stderr}\n```")
+            return "\n".join(result_parts)
+        else:
+            return f"❌ **pip 命令执行失败**\n\n{stderr}"
+    
+    elif cmd.startswith('/git'):
+        parts = cmd.split(maxsplit=1)
+        if len(parts) < 2:
+            return "⚠️ 请指定 Git 命令，例如：`/git status`"
+        
+        git_command = f"git {parts[1]}"
+        success, stdout, stderr = execute_shell_command(git_command)
+        
+        if success:
+            result_parts = []
+            result_parts.append("✅ **Git 命令执行成功**")
+            if stdout.strip():
+                result_parts.append(f"\n**输出：**\n```\n{stdout}\n```")
+            if stderr.strip():
+                result_parts.append(f"\n**警告/错误：**\n```\n{stderr}\n```")
+            return "\n".join(result_parts)
+        else:
+            return f"❌ **Git 命令执行失败**\n\n{stderr}"
+    
     elif cmd == '/status':
         msg_count = len(st.session_state.chat_messages)
         current_dir = st.session_state.current_dir
         security_status = get_security_status()
+        current_mode = security_status['current_mode']
         return f"""**📊 当前状态：**
 - 对话 ID：{st.session_state.current_chat_id}
 - 消息数量：{msg_count}
 - 模型：{st.session_state.model_config['model']}
 - 提供商：{st.session_state.model_config['provider']}
 - 当前目录：{current_dir}
+- 当前模式：{current_mode}（{'全能' if security_status['is_unlimited'] else '安全'}）
 
 **🔒 安全状态：**
 - 备份目录：{security_status['backup_dir']}
@@ -399,8 +500,10 @@ def handle_command(cmd: str) -> str:
     
     elif cmd == '/security status':
         status = get_security_status()
+        mode_label = "🔓 全能模式" if status['is_unlimited'] else "🛡️ 安全模式"
         return f"""**🔒 安全状态：**
 
+- 当前模式：{mode_label}
 - 项目根目录：{status['project_root']}
 - 备份目录：{status['backup_dir']}
 - 日志目录：{status['log_dir']}
@@ -810,6 +913,56 @@ def handle_command(cmd: str) -> str:
 
 with st.sidebar:
     st.markdown("# 🤖 工业级 AI 项目管家")
+    
+    current_mode = get_mode()
+    if current_mode == "safe":
+        st.markdown("### 🛡️ 安全模式")
+        st.success("安全模式：AI 只能访问项目目录")
+    else:
+        st.markdown("### 🔓 全能模式")
+        st.warning("全能模式：AI 可以访问系统任意位置")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🛡️ 安全模式", use_container_width=True, type="primary" if current_mode == "safe" else "secondary"):
+            set_mode("safe")
+            st.rerun()
+    with col2:
+        if st.button("🔓 全能模式", use_container_width=True, type="primary" if current_mode == "unlimited" else "secondary"):
+            if current_mode != "unlimited":
+                st.session_state.show_unlimited_warning = True
+                st.rerun()
+            else:
+                set_mode("safe")
+                st.rerun()
+    
+    if st.session_state.get('show_unlimited_warning', False):
+        st.warning("""
+⚠️ **重要警告**
+
+你即将切换到**全能模式**，这将：
+
+- ✅ 允许 AI 执行任意 Shell 命令
+- ✅ 允许 AI 读写任意文件（包括系统文件）
+- ✅ 允许 AI 安装任意依赖
+- ✅ 允许 AI 操作任意 Git 仓库
+
+⚠️ **风险提示**：
+- 它真的可以删除你的文件、修改系统配置
+- 只在你信任的环境中使用
+- 不要给不信任的人访问权限
+""")
+        col_confirm, col_cancel = st.columns(2)
+        with col_confirm:
+            if st.button("✅ 我确认开启全能模式", type="primary", use_container_width=True):
+                set_mode("unlimited")
+                st.session_state.show_unlimited_warning = False
+                st.rerun()
+        with col_cancel:
+            if st.button("❌ 取消", use_container_width=True):
+                st.session_state.show_unlimited_warning = False
+                st.rerun()
+    
     st.markdown("---")
     
     st.markdown("### 🎯 8 个核心场景")
