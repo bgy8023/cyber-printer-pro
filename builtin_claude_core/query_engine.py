@@ -16,6 +16,8 @@ class AsyncQueryEngine:
         self.base_url = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
         self.model_name = os.getenv("LLM_MODEL_NAME", "gpt-4o")
         self.max_retries = int(os.getenv("MAX_RETRY", "3"))
+        self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
+        self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", "15000"))
 
     async def call_llm_async(self, user_prompt: str, system_prompt: str) -> str:
         for i in range(self.max_retries):
@@ -26,7 +28,8 @@ class AsyncQueryEngine:
                               {"role": "user", "content": user_prompt}],
                     api_key=self.api_key,
                     base_url=self.base_url,
-                    temperature=0.7
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens
                 )
                 return response.choices[0].message.content.strip()
             except RateLimitError:
