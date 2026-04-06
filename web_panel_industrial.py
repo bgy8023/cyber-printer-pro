@@ -54,6 +54,59 @@ def init_industrial_session():
         }
 
 
+def save_panel_settings():
+    """保存所有面板设置到 JSON 文件"""
+    import json
+    import tempfile
+    
+    settings_file = Path("panel_settings.json")
+    
+    # 收集所有需要保存的设置
+    settings = {
+        "llm_config": st.session_state.get("llm_config", {}),
+        "current_workspace": st.session_state.get("current_workspace", "chat"),
+        "theme_mode": st.session_state.get("theme_mode", "dark"),
+        "save_time": datetime.now().isoformat()
+    }
+    
+    # 原子写入：先写入临时文件，再替换
+    try:
+        with tempfile.NamedTemporaryFile('w', dir=str(settings_file.parent), delete=False, encoding='utf-8') as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+            temp_name = f.name
+        
+        os.replace(temp_name, str(settings_file))
+        return True, f"设置已保存到 {settings_file}"
+    except Exception as e:
+        return False, f"保存失败：{str(e)}"
+
+
+def load_panel_settings():
+    """从 JSON 文件加载所有面板设置"""
+    import json
+    
+    settings_file = Path("panel_settings.json")
+    
+    if not settings_file.exists():
+        return False, "设置文件不存在"
+    
+    try:
+        with open(settings_file, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        
+        # 加载设置到 st.session_state
+        if "llm_config" in settings:
+            st.session_state.llm_config = settings["llm_config"]
+        if "current_workspace" in settings:
+            st.session_state.current_workspace = settings["current_workspace"]
+        if "theme_mode" in settings:
+            st.session_state.theme_mode = settings["theme_mode"]
+        
+        return True, f"设置已从 {settings_file} 加载"
+    except Exception as e:
+        return False, f"加载失败：{str(e)}"
+
+
 def apply_industrial_theme():
     """应用工业级主题"""
     st.markdown("""
@@ -294,6 +347,25 @@ def render_sidebar():
         
         st.metric("当前章节", f"第 {current_chapter} 章")
         st.metric("已生成", f"{file_count} 章")
+        
+        st.divider()
+        
+        st.markdown("### 💾 面板设置")
+        
+        if st.button("💾 保存所有设置", type="primary", use_container_width=True):
+            success, message = save_panel_settings()
+            if success:
+                st.success(message)
+            else:
+                st.error(message)
+        
+        if st.button("📂 加载所有设置", use_container_width=True):
+            success, message = load_panel_settings()
+            if success:
+                st.success(message)
+                st.rerun()
+            else:
+                st.error(message)
 
 
 def render_chat_workspace():
