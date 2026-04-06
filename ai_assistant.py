@@ -189,7 +189,7 @@ def init_session_state():
     if 'show_unlimited_warning' not in st.session_state:
         st.session_state.show_unlimited_warning = False
     if 'system_prompt' not in st.session_state:
-        st.session_state.system_prompt = """你是赛博印钞机 Pro 的工业级 AI 项目管家，一个功能强大、安全可靠的 AI 助手。
+        st.session_state.system_prompt = """你是OpenMars 的工业级 AI 项目管家，一个功能强大、安全可靠的 AI 助手。
 
 你的核心能力（8 个核心场景）：
 1. 分析项目结构 & 代码审查 - 分析代码，找 bug，提优化建议

@@ -19,7 +19,7 @@ init_session_state()
 state = st.session_state.state
 
 st.set_page_config(
-    page_title="赛博印钞机 Pro",
+    page_title="OpenMars",
     page_icon="🚀",
     layout="wide",
     initial_sidebar_state="collapsed"

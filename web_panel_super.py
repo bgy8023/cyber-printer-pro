@@ -22,7 +22,7 @@ init_session_state()
 state = st.session_state.state
 
 st.set_page_config(
-    page_title="🚀 赛博印钞机 Pro - 超级面板",
+    page_title="🚀 OpenMars - 超级面板",
     page_icon="🚀",
     layout="wide",
     initial_sidebar_state="collapsed"

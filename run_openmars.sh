@@ -1,5 +1,5 @@
 #!/bin/bash
-# 赛博印钞机 Pro - 核心胶水脚本（openmars路径自动检测版）
+# OpenMars - 核心胶水脚本（openmars路径自动检测版）
 
 # ================= 系统兼容处理 =================
 # Mac用gtimeout，Linux用timeout

@@ -37,7 +37,7 @@ def _get_pipeline_state_hash(pipeline: DAGPipeline) -> str:
 
 def render_header():
     """渲染页面头部"""
-    st.title("🌌 赛博印钞机 Pro Mac版")
+    st.title("🌌 OpenMars Mac版")
     status_badges = (
         "<span class='status-badge'>✅ 内置技能物理内聚合并</span>"
         "<span class='status-badge'>✅ Claude官方内核级Undercover Mode</span>"

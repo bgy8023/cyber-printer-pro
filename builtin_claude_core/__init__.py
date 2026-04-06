@@ -1,5 +1,5 @@
 # =============================================
-# 赛博印钞机 Pro | 核心模块导出
+# OpenMars | 核心模块导出
 # =============================================
 from .logger import logger
 from .llm_adapter import get_llm_adapter

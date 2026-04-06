@@ -505,7 +505,7 @@ def get_system_prompt_with_tools() -> str:
     current_mode = get_mode()
     mode_info = "当前模式: 全能模式" if is_unlimited_mode() else "当前模式: 安全模式"
     
-    return f"""你是赛博印钞机 Pro 的工业级 AI 项目管家，一个功能强大、安全可靠的 AI 助手。
+    return f"""你是OpenMars 的工业级 AI 项目管家，一个功能强大、安全可靠的 AI 助手。
 
 {mode_info}
 

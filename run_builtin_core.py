@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 赛博印钞机 Pro - 简化版核心引擎（直接使用 LLM API）
+# OpenMars - 简化版核心引擎（直接使用 LLM API）
 # 替代 run_openmars.sh，不需要外部 openmars 命令
 
 import os
@@ -137,7 +137,7 @@ def generate_chapter_simple(
     novel_settings_dir = os.path.join(resource_dir, "novel_settings")
     
     print("=" * 60)
-    print(f"🚀 赛博印钞机 Pro - 简化核心引擎启动")
+    print(f"🚀 OpenMars - 简化核心引擎启动")
     print(f"📖 第 {chapter_num} 章生成任务")
     print("=" * 60)
     
@@ -272,7 +272,7 @@ def generate_chapter_simple(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="赛博印钞机 Pro - 简化核心引擎")
+    parser = argparse.ArgumentParser(description="OpenMars - 简化核心引擎")
     parser.add_argument("chapter_num", type=int, help="章节号")
     parser.add_argument("prompt", type=str, help="核心要求提示词")
     parser.add_argument("target_words", type=int, help="目标字数")

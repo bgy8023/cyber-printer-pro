@@ -49,7 +49,7 @@ class BrowserConfig:
 @dataclass
 class AppConfig:
     version: str = "2.0.0"
-    app_name: str = "赛博印钞机 Pro Ultra"
+    app_name: str = "OpenMars Ultra"
     workspaces: List[WorkspaceConfig] = field(default_factory=list)
     models: List[ModelConfig] = field(default_factory=list)
     current_workspace: str = "default"

@@ -185,7 +185,7 @@ class SystemDiagnostic:
 
     def generate_report(self) -> str:
         diag = self.run_full_diagnostic()
-        lines = ["=" * 60, "赛博印钞机 Pro Ultra - 系统诊断报告", "=" * 60, ""]
+        lines = ["=" * 60, "OpenMars Ultra - 系统诊断报告", "=" * 60, ""]
 
         lines.append(f"生成时间: {diag['timestamp']}")
         lines.append("")

@@ -24,7 +24,7 @@ def _get_pipeline_state_hash(pipeline: DAGPipeline) -> str:
 
 def render_header():
     """简洁的页面头部"""
-    st.title("🚀 赛博印钞机 Pro")
+    st.title("🚀 OpenMars")
     
     st.markdown("""
     <style>
@@ -73,7 +73,7 @@ def render_quick_start():
     with st.container():
         st.markdown("""
         <div class="quick-start-card">
-            <h2 style="margin: 0 0 12px 0;">👋 欢迎使用赛博印钞机 Pro</h2>
+            <h2 style="margin: 0 0 12px 0;">👋 欢迎使用OpenMars</h2>
             <p style="margin: 0 0 20px 0; opacity: 0.9;">一键生成专业网文小说，从大纲到发布全自动化</p>
             <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 200px;">

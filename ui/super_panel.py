@@ -77,7 +77,7 @@ def render_super_header():
     
     st.markdown("""
     <div class="super-header">
-        <h1>🚀 赛博印钞机 Pro - 超级自定义面板</h1>
+        <h1>🚀 OpenMars - 超级自定义面板</h1>
         <p>功能完整，小白友好，Agent 爱好者的天堂！</p>
     </div>
     """, unsafe_allow_html=True)

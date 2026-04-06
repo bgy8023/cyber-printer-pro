@@ -29,7 +29,7 @@ init_session_state()
 state = st.session_state.state
 
 st.set_page_config(
-    page_title="🚀 赛博印钞机 Pro - 终极面板",
+    page_title="🚀 OpenMars - 终极面板",
     page_icon="🚀",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -185,7 +185,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown("# 🚀 赛博印钞机")
+    st.markdown("# 🚀 OpenMars")
     st.markdown("---")
     
     workspaces = {
@@ -306,7 +306,7 @@ if current_ws == 'chat':
                     return "输出目录不存在"
             
             elif cmd.startswith('/novel info'):
-                return "**小说信息：**\n- 项目：赛博印钞机 Pro\n- 类型：玄幻修仙（默认）\n- 状态：运行中"
+                return "**小说信息：**\n- 项目：OpenMars\n- 类型：玄幻修仙（默认）\n- 状态：运行中"
             
             elif cmd.startswith('/config'):
                 env_path = ".env"
@@ -352,7 +352,7 @@ if current_ws == 'chat':
                 with st.spinner("思考中..."):
                     response_content = adapter.generate(
                         prompt=prompt,
-                        system_prompt="你是赛博印钞机 Pro 的 AI 助手。你可以帮助用户管理项目、生成小说、查看状态等。回答要友好、专业、简洁。",
+                        system_prompt="你是OpenMars 的 AI 助手。你可以帮助用户管理项目、生成小说、查看状态等。回答要友好、专业、简洁。",
                         temperature=0.7
                     )
                 
@@ -379,7 +379,7 @@ elif current_ws == 'quick':
     with col1:
         with st.container():
             st.markdown('<div class="ultimate-card">', unsafe_allow_html=True)
-            st.markdown("### 👋 欢迎使用赛博印钞机")
+            st.markdown("### 👋 欢迎使用OpenMars")
             st.markdown("最简单的配置，小白也能轻松使用！")
             
             c1, c2 = st.columns(2)
