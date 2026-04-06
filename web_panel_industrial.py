@@ -37,6 +37,21 @@ def init_industrial_session():
         st.session_state.state.load_current_chapter()
     if 'current_workspace' not in st.session_state:
         st.session_state.current_workspace = 'chat'
+    
+    # 初始化 LLM 配置到 st.session_state
+    if 'llm_config' not in st.session_state:
+        from dotenv import load_dotenv
+        load_dotenv()
+        st.session_state.llm_config = {
+            'provider': os.getenv('LLM_PROVIDER', 'OpenAI'),
+            'api_key': os.getenv('LLM_API_KEY', ''),
+            'api_base': os.getenv('API_BASE_URL', 'https://api.openai.com/v1'),
+            'model': os.getenv('LLM_MODEL_NAME', 'gpt-4o'),
+            'temperature': float(os.getenv('LLM_TEMPERATURE', '0.7')),
+            'top_p': float(os.getenv('LLM_TOP_P', '0.9')),
+            'max_tokens': int(os.getenv('LLM_MAX_TOKENS', '15000')),
+            'max_retries': int(os.getenv('MAX_RETRY', '3'))
+        }
 
 
 def apply_industrial_theme():
@@ -492,14 +507,33 @@ def render_llm_workspace():
     st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
     st.markdown("### 🤖 大模型配置")
     
-    llm_provider = st.selectbox("LLM 提供商", ["OpenAI", "Anthropic", "DeepSeek", "MiniMax", "自定义"])
+    config = st.session_state.llm_config
+    
+    llm_provider = st.selectbox(
+        "LLM 提供商", 
+        ["OpenAI", "Anthropic", "DeepSeek", "MiniMax", "自定义"],
+        index=["OpenAI", "Anthropic", "DeepSeek", "MiniMax", "自定义"].index(config['provider']) if config['provider'] in ["OpenAI", "Anthropic", "DeepSeek", "MiniMax", "自定义"] else 0
+    )
     
     st.markdown('<div style="background: #0f172a; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem;">', unsafe_allow_html=True)
     st.markdown("#### 🔑 API 配置")
     
-    api_key = st.text_input("API Key", type="password", placeholder="sk-...")
-    api_base = st.text_input("API Base URL", placeholder="https://api.example.com/v1")
-    api_model = st.text_input("Model", placeholder="gpt-4, claude-3, etc.")
+    api_key = st.text_input(
+        "API Key", 
+        type="password", 
+        value=config['api_key'],
+        placeholder="sk-..."
+    )
+    api_base = st.text_input(
+        "API Base URL", 
+        value=config['api_base'],
+        placeholder="https://api.example.com/v1"
+    )
+    api_model = st.text_input(
+        "Model", 
+        value=config['model'],
+        placeholder="gpt-4, claude-3, etc."
+    )
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -508,11 +542,32 @@ def render_llm_workspace():
     
     col1, col2 = st.columns(2)
     with col1:
-        temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1)
-        top_p = st.slider("Top-P", 0.1, 1.0, 0.9, 0.05)
+        temperature = st.slider(
+            "Temperature", 
+            0.0, 2.0, 
+            config['temperature'], 
+            0.1
+        )
+        top_p = st.slider(
+            "Top-P", 
+            0.1, 1.0, 
+            config['top_p'], 
+            0.05
+        )
     with col2:
-        max_tokens = st.number_input("Max Tokens", min_value=1000, max_value=100000, value=15000, step=1000)
-        max_retries = st.number_input("重试次数", min_value=1, max_value=10, value=3)
+        max_tokens = st.number_input(
+            "Max Tokens", 
+            min_value=1000, 
+            max_value=100000, 
+            value=config['max_tokens'], 
+            step=1000
+        )
+        max_retries = st.number_input(
+            "重试次数", 
+            min_value=1, 
+            max_value=10, 
+            value=config['max_retries']
+        )
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -520,6 +575,19 @@ def render_llm_workspace():
     st.markdown("#### 💾 保存配置")
     
     if st.button("💾 保存到 .env", type="primary"):
+        # 更新 st.session_state
+        st.session_state.llm_config.update({
+            'provider': llm_provider,
+            'api_key': api_key,
+            'api_base': api_base,
+            'model': api_model,
+            'temperature': temperature,
+            'top_p': top_p,
+            'max_tokens': max_tokens,
+            'max_retries': max_retries
+        })
+        
+        # 保存到 .env
         env_path = ".env"
         lines = []
         if os.path.exists(env_path):
@@ -551,25 +619,50 @@ def render_llm_workspace():
                     found_keys.add('API_BASE_URL')
                     updated = True
             if api_model and not updated:
-                if line.startswith('MODEL='):
+                if line.startswith('LLM_MODEL_NAME='):
+                    new_lines.append(f'LLM_MODEL_NAME={api_model}\n')
+                    found_keys.add('LLM_MODEL_NAME')
+                    updated = True
+                elif line.startswith('MODEL='):
                     new_lines.append(f'MODEL={api_model}\n')
                     found_keys.add('MODEL')
+                    updated = True
+            if temperature and not updated:
+                if line.startswith('LLM_TEMPERATURE='):
+                    new_lines.append(f'LLM_TEMPERATURE={temperature}\n')
+                    found_keys.add('LLM_TEMPERATURE')
+                    updated = True
+            if max_tokens and not updated:
+                if line.startswith('LLM_MAX_TOKENS='):
+                    new_lines.append(f'LLM_MAX_TOKENS={max_tokens}\n')
+                    found_keys.add('LLM_MAX_TOKENS')
+                    updated = True
+            if max_retries and not updated:
+                if line.startswith('MAX_RETRY='):
+                    new_lines.append(f'MAX_RETRY={max_retries}\n')
+                    found_keys.add('MAX_RETRY')
                     updated = True
             if not updated:
                 if line:
                     new_lines.append(line + '\n')
         
         if api_key and 'OPENAI_API_KEY' not in found_keys and 'LLM_API_KEY' not in found_keys:
-            new_lines.append(f'OPENAI_API_KEY={api_key}\n')
+            new_lines.append(f'LLM_API_KEY={api_key}\n')
         if api_base and 'OPENAI_API_BASE' not in found_keys and 'API_BASE_URL' not in found_keys:
-            new_lines.append(f'OPENAI_API_BASE={api_base}\n')
-        if api_model and 'MODEL' not in found_keys:
-            new_lines.append(f'MODEL={api_model}\n')
+            new_lines.append(f'API_BASE_URL={api_base}\n')
+        if api_model and 'LLM_MODEL_NAME' not in found_keys and 'MODEL' not in found_keys:
+            new_lines.append(f'LLM_MODEL_NAME={api_model}\n')
+        if temperature and 'LLM_TEMPERATURE' not in found_keys:
+            new_lines.append(f'LLM_TEMPERATURE={temperature}\n')
+        if max_tokens and 'LLM_MAX_TOKENS' not in found_keys:
+            new_lines.append(f'LLM_MAX_TOKENS={max_tokens}\n')
+        if max_retries and 'MAX_RETRY' not in found_keys:
+            new_lines.append(f'MAX_RETRY={max_retries}\n')
         
         with open(env_path, 'w', encoding='utf-8') as f:
             f.writelines(new_lines)
         
-        st.success("✅ 配置已保存到 .env！")
+        st.success("✅ 配置已保存到 .env 和 st.session_state！")
     
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
