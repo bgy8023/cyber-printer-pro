@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 import sys
 import os
+import re
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -403,13 +404,12 @@ def render_chat_workspace():
 - `/novel list` - 列出小说章节
 - `/novel info` - 查看小说信息
 - `/config` - 查看当前配置
+- `/novel generate` - 生成当前章节
+- `/novel chapter N` - 设置章节号（如：/novel chapter 10）
+- `/novel words N` - 设置目标字数（如：/novel words 10000）
 """
             elif cmd == '/status':
-                chapter_num_file = os.path.expanduser("~/OpenMars_Arch/current_chapter.txt")
-                current_chapter = "1"
-                if os.path.exists(chapter_num_file):
-                    with open(chapter_num_file, "r") as f:
-                        current_chapter = f.read().strip() or "1"
+                state = st.session_state.state
                 
                 from utils.helpers import get_resource_path
                 output_dir = get_resource_path("output")
@@ -418,9 +418,42 @@ def render_chat_workspace():
                     file_count = len([f for f in os.listdir(output_dir) if f.endswith('.md')])
                 
                 return f"""**项目状态：**
-- 当前章节：第 {current_chapter} 章
+- 当前章节：第 {state.current_chapter} 章
 - 已生成：{file_count} 章
 - 工作区：{st.session_state.current_workspace}
+- 目标字数：{state.target_words} 字
+- 小说：{state.selected_novel}
+"""
+            elif cmd.startswith('/novel chapter'):
+                parts = cmd.split()
+                if len(parts) == 3:
+                    try:
+                        chapter = int(parts[2])
+                        state = st.session_state.state
+                        state.current_chapter = chapter
+                        return f"✅ 章节号已设置为：第 {chapter} 章"
+                    except ValueError:
+                        return "❌ 请输入有效的章节号（数字）"
+                else:
+                    return "❌ 用法：/novel chapter <章节号>"
+            elif cmd.startswith('/novel words'):
+                parts = cmd.split()
+                if len(parts) == 3:
+                    try:
+                        words = int(parts[2])
+                        state = st.session_state.state
+                        state.target_words = words
+                        return f"✅ 目标字数已设置为：{words} 字"
+                    except ValueError:
+                        return "❌ 请输入有效的字数（数字）"
+                else:
+                    return "❌ 用法：/novel words <目标字数>"
+            elif cmd.startswith('/novel generate'):
+                state = st.session_state.state
+                
+                return f"""🚀 正在准备生成第 {state.current_chapter} 章...
+请前往 ⚡ 快速模式 工作区点击生成按钮！
+或者直接对我说："生成第 {state.current_chapter} 章"
 """
             elif cmd == '/clear':
                 st.session_state.chat_messages = []
@@ -461,6 +494,23 @@ def render_chat_workspace():
                     config_info += "未找到 .env 文件"
                 
                 return config_info
+            
+            # 自然语言理解：生成第 N 章
+            chapter_match = re.search(r'(?:生成|写|来)第\s*(\d+)\s*章', cmd)
+            if chapter_match:
+                chapter = int(chapter_match.group(1))
+                state = st.session_state.state
+                state.current_chapter = chapter
+                return f"""✅ 已设置为第 {chapter} 章！
+请前往 ⚡ 快速模式 工作区点击生成按钮！"""
+            
+            # 自然语言理解：设置目标字数
+            words_match = re.search(r'(?:写|来|目标)\s*(\d+)\s*字', cmd)
+            if words_match:
+                words = int(words_match.group(1))
+                state = st.session_state.state
+                state.target_words = words
+                return f"✅ 目标字数已设置为：{words} 字"
             
             return None
         
