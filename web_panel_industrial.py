@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-工业级 Web 面板 - 精简稳定版
+工业级 Web 面板 - 优化版
 OpenMars 工业级 AI 助手
+遵循 frontend-skill 原则：克制构图、增强品牌、优化层次、添加动效
 """
 import streamlit as st
 from datetime import datetime
@@ -104,15 +105,25 @@ def load_panel_settings():
 
 
 def apply_industrial_theme():
-    """应用工业级主题"""
+    """应用工业级主题 - 优化版（遵循 frontend-skill 原则）"""
     st.markdown("""
     <style>
+        /* 基础布局 */
         .main .block-container {
-            padding-top: 1rem;
-            padding-bottom: 1rem;
+            padding-top: 0;
+            padding-bottom: 2rem;
             max-width: 100%;
         }
         
+        /* 品牌头栏 */
+        .brand-header {
+            background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+            border-bottom: 1px solid #334155;
+            padding: 1rem 2rem;
+            margin: -1rem -2rem 2rem -2rem;
+        }
+        
+        /* 侧边栏 */
         [data-testid="stSidebar"] {
             background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
             border-right: 1px solid #334155;
@@ -128,6 +139,7 @@ def apply_industrial_theme():
             color: #94a3b8 !important;
         }
         
+        /* 按钮系统 */
         .stButton > button {
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
@@ -136,27 +148,34 @@ def apply_industrial_theme():
             padding: 0.5rem 1rem;
             font-weight: 500;
             transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stButton > button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%);
+            transform-origin: 50% 50%;
+        }
+        
+        .stButton > button:focus:not(:active)::after {
+            animation: ripple 1s ease-out;
         }
         
         .stButton > button:hover {
-            transform: translateY(-1px);
+            transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
         }
         
-        .industrial-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            transition: all 0.2s ease;
-        }
-        
-        .industrial-card:hover {
-            border-color: #6366f1;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
-        }
-        
+        /* 工作区按钮 */
         .workspace-btn {
             display: flex;
             align-items: center;
@@ -172,24 +191,75 @@ def apply_industrial_theme():
             font-size: 0.875rem;
             margin-bottom: 0.25rem;
             transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .workspace-btn::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 0;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            transition: width 0.3s ease;
+            z-index: -1;
         }
         
         .workspace-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
             color: white;
+        }
+        
+        .workspace-btn.active::after {
+            width: 100%;
         }
         
         .workspace-btn.active {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
+            background: transparent;
         }
         
+        /* 视觉层次系统 */
+        .workspace-primary {
+            background: #0f172a;
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        .workspace-secondary {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            animation: fadeIn 0.4s ease-out;
+        }
+        
+        .workspace-utility {
+            background: transparent;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        /* 指标卡片（保留必要卡片） */
         .metric-card {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.8) 100%);
             border: 1px solid #334155;
             border-radius: 12px;
             padding: 1.25rem;
             text-align: center;
+            transition: transform 0.2s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
         }
         
         .metric-value {
@@ -207,6 +277,7 @@ def apply_industrial_theme():
             margin-top: 0.25rem;
         }
         
+        /* 状态指示器 */
         .status-indicator {
             display: inline-flex;
             align-items: center;
@@ -220,16 +291,10 @@ def apply_industrial_theme():
         .status-online {
             background: rgba(34, 197, 94, 0.2);
             color: #22c55e;
+            animation: pulse 2s infinite;
         }
         
-        .ultimate-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-        }
-        
+        /* 生成按钮 */
         .generate-btn {
             background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
@@ -241,6 +306,19 @@ def apply_industrial_theme():
             cursor: pointer;
             width: 100%;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .generate-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.7s ease;
         }
         
         .generate-btn:hover {
@@ -248,6 +326,11 @@ def apply_industrial_theme():
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
         
+        .generate-btn:hover::before {
+            left: 100%;
+        }
+        
+        /* 滚动条 */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -265,16 +348,70 @@ def apply_industrial_theme():
         ::-webkit-scrollbar-thumb:hover {
             background: #475569;
         }
+        
+        /* 动画 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes ripple {
+            0% { transform: scale(0, 0); opacity: 0.5; }
+            100% { transform: scale(40, 40); opacity: 0; }
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .main .block-container {
+                padding: 0.5rem;
+            }
+            
+            .workspace-primary {
+                padding: 1rem;
+                border-radius: 12px;
+            }
+            
+            .workspace-secondary {
+                padding: 1rem;
+                border-radius: 8px;
+            }
+            
+            .brand-header {
+                padding: 0.75rem 1rem;
+                margin: -0.5rem -1rem 1.5rem -1rem;
+            }
+        }
     </style>
     """, unsafe_allow_html=True)
 
 
+def render_brand_header():
+    """渲染品牌头栏 - 增强品牌展示"""
+    st.markdown("""
+    <div class="brand-header">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="font-size: 2rem; animation: fadeIn 0.5s ease-out;">🚀</div>
+            <div>
+                <h1 style="margin: 0; font-size: 1.5rem; color: white; font-weight: 700;">OpenMars</h1>
+                <p style="margin: 0; color: #94a3b8; font-size: 0.875rem;">工业级 AI 助手</p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
 def render_sidebar():
-    """渲染工业级侧边栏"""
+    """渲染工业级侧边栏 - 优化版"""
     with st.sidebar:
         st.markdown("""
         <div style="text-align: center; padding: 1rem 0;">
-            <div style="font-size: 2rem; margin-bottom: 0.5rem;">🚀</div>
+            <div style="font-size: 2rem; margin-bottom: 0.5rem; animation: fadeIn 0.3s ease-out;">🚀</div>
             <h1 style="margin: 0; font-size: 1.5rem;">OpenMars</h1>
             <p style="color: #94a3b8; margin: 0.5rem 0 0; font-size: 0.875rem;">工业级 AI 助手</p>
         </div>
@@ -311,11 +448,19 @@ def render_sidebar():
         
         for ws_id, ws_info in workspaces.items():
             is_active = st.session_state.current_workspace == ws_id
-            if st.button(
-                f"{ws_info['icon']} {ws_info['name']}",
-                key=f"ws_{ws_id}",
-                use_container_width=True
-            ):
+            btn_class = "workspace-btn active" if is_active else "workspace-btn"
+            
+            st.markdown(f"""
+            <button class="{btn_class}" onclick="window.parent.postMessage({{'type': 'workspace_change', 'workspace': '{ws_id}'}}, '*')">
+                {ws_info['icon']} {ws_info['name']}
+            </button>
+            """, unsafe_allow_html=True)
+            
+            # 添加点击处理
+            if st.button(f"{ws_info['icon']} {ws_info['name']}", 
+                        key=f"ws_{ws_id}", 
+                        use_container_width=True,
+                        type="primary" if is_active else "secondary"):
                 st.session_state.current_workspace = ws_id
                 st.rerun()
         
@@ -328,8 +473,21 @@ def render_sidebar():
         if output_dir.exists():
             file_count = len([f for f in os.listdir(output_dir) if f.endswith('.md')])
         
-        st.metric("当前章节", f"第 {st.session_state.current_chapter} 章")
-        st.metric("已生成", f"{file_count} 章")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">第 {st.session_state.current_chapter} 章</div>
+                <div class="metric-label">当前章节</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-value">{file_count}</div>
+                <div class="metric-label">已生成</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         st.divider()
         
@@ -352,7 +510,8 @@ def render_sidebar():
 
 
 def render_chat_workspace():
-    """渲染 AI 助手工作区"""
+    """渲染 AI 助手工作区 - 优化版"""
+    st.markdown('<div class="workspace-primary">', unsafe_allow_html=True)
     st.markdown("### 💬 AI 助手 - 对话管理")
     
     chat_container = st.container()
@@ -365,7 +524,9 @@ def render_chat_workspace():
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
     
-    st.divider()
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="workspace-secondary">', unsafe_allow_html=True)
     
     if prompt := st.chat_input("输入消息或命令（/help 查看帮助）"):
         st.session_state.chat_messages.append({"role": "user", "content": prompt})
@@ -524,16 +685,22 @@ def render_chat_workspace():
                         st.error(error_msg)
         
         st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_quick_workspace():
-    """渲染快速模式工作区"""
+    """渲染快速模式工作区 - 优化版"""
+    st.markdown('<div class="workspace-primary">', unsafe_allow_html=True)
+    st.markdown("### 👋 欢迎使用 OpenMars")
+    st.markdown("最简单的配置，小白也能轻松使用！")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
-        st.markdown("### 👋 欢迎使用OpenMars")
-        st.markdown("最简单的配置，小白也能轻松使用！")
+        st.markdown('<div class="workspace-secondary">', unsafe_allow_html=True)
+        st.markdown("#### 📝 配置参数")
         
         c1, c2 = st.columns(2)
         with c1:
@@ -550,19 +717,20 @@ def render_quick_workspace():
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
-        st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
-        st.markdown("### 🚀 一键生成")
+        st.markdown('<div class="workspace-secondary">', unsafe_allow_html=True)
+        st.markdown("#### 🚀 生成控制")
         
         st.divider()
         
-        lazy_btn = st.button("🔥 一键躺平生成", type="primary", use_container_width=True)
+        if st.button("🔥 一键躺平生成", type="primary", use_container_width=True, key="generate_btn"):
+            st.session_state.generate_triggered = True
         
         st.markdown('</div>', unsafe_allow_html=True)
     
-    st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
-    st.markdown("### 📋 任务进度")
-    
-    if lazy_btn:
+    if st.session_state.get('generate_triggered', False):
+        st.markdown('<div class="workspace-secondary">', unsafe_allow_html=True)
+        st.markdown("#### 📋 任务进度")
+        
         try:
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -572,7 +740,7 @@ def render_quick_workspace():
             progress_bar.progress(10)
             
             with log_container:
-                st.markdown("#### 📝 实时日志")
+                st.markdown("##### 📝 实时日志")
                 log_placeholder = st.empty()
             
             full_prompt = f"""
@@ -610,8 +778,8 @@ def render_quick_workspace():
                     with log_container:
                         log_placeholder.success(f"🎉 生成成功！实际字数：{len(result_content)} 字")
                     
-                    st.markdown("#### 📄 生成结果")
-                    st.text_area("章节内容", value=result_content, height=400)
+                    st.markdown("##### 📄 生成结果")
+                    st.text_area("章节内容", value=result_content, height=400, key="result_content")
                     
                     output_dir = Path("output")
                     output_dir.mkdir(exist_ok=True)
@@ -624,6 +792,7 @@ def render_quick_workspace():
                     st.success(f"✅ 文件已保存到：{output_file}")
                     
                     st.session_state.current_chapter = chapter_num + 1
+                    st.session_state.generate_triggered = False
                     
                 else:
                     status_text.text("❌ 生成失败！")
@@ -633,6 +802,7 @@ def render_quick_workspace():
                         log_placeholder.error(f"❌ 生成失败：{result_content}")
                     
                     st.error(f"生成失败：{result_content}")
+                    st.session_state.generate_triggered = False
                     
             except ImportError as e:
                 status_text.text("⚠️ 生成模块未找到，显示演示内容")
@@ -641,20 +811,22 @@ def render_quick_workspace():
                 with log_container:
                     log_placeholder.warning(f"⚠️ 演示模式：{e}")
                 
-                st.markdown("#### 📄 演示内容")
+                st.markdown("##### 📄 演示内容")
                 st.text_area("章节内容", value="这是演示内容，实际使用时请确保 cyber_printer_ultimate.py 存在且配置正确", height=200)
+                st.session_state.generate_triggered = False
                 
         except Exception as e:
             st.error(f"生成过程中发生错误：{e}")
             import traceback
             st.text(traceback.format_exc())
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+            st.session_state.generate_triggered = False
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_llm_workspace():
-    """渲染大模型配置工作区（小白友好版）"""
-    st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
+    """渲染大模型配置工作区 - 优化版"""
+    st.markdown('<div class="workspace-primary">', unsafe_allow_html=True)
     st.markdown("### 🤖 大模型配置")
     
     config = st.session_state.llm_config
@@ -690,6 +862,9 @@ def render_llm_workspace():
             current_provider_display = display_name
             break
     
+    st.markdown('<div class="workspace-secondary">', unsafe_allow_html=True)
+    st.markdown("#### 🔑 API 配置")
+    
     selected_provider = st.selectbox(
         "🎁 选择大模型服务商", 
         provider_display_names,
@@ -698,9 +873,6 @@ def render_llm_workspace():
     )
     
     preset = provider_presets[selected_provider]
-    
-    st.markdown('<div style="background: #0f172a; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem;">', unsafe_allow_html=True)
-    st.markdown("#### 🔑 API 密钥配置")
     
     api_key = st.text_input(
         "API Key（必填）", 
@@ -743,8 +915,8 @@ def render_llm_workspace():
     
     st.markdown('</div>', unsafe_allow_html=True)
     
-    st.markdown('<div style="background: #0f172a; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem;">', unsafe_allow_html=True)
-    st.markdown("#### ⚙️ 生成参数（新手推荐使用默认值）")
+    st.markdown('<div class="workspace-secondary">', unsafe_allow_html=True)
+    st.markdown("#### ⚙️ 生成参数")
     
     param_presets = {
         "🎨 创意写作": {"temperature": 0.9, "top_p": 0.95, "desc": "适合小说、故事等创意内容"},
@@ -803,7 +975,7 @@ def render_llm_workspace():
     
     st.markdown('</div>', unsafe_allow_html=True)
     
-    st.markdown('<div style="background: #0f172a; border-radius: 8px; padding: 1rem;">', unsafe_allow_html=True)
+    st.markdown('<div class="workspace-utility">', unsafe_allow_html=True)
     st.markdown("#### 💾 保存配置")
     
     if st.button("💾 保存到 .env", type="primary", use_container_width=True):
@@ -911,8 +1083,8 @@ def render_llm_workspace():
 
 
 def render_history_workspace():
-    """渲染历史记录工作区"""
-    st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
+    """渲染历史记录工作区 - 优化版"""
+    st.markdown('<div class="workspace-primary">', unsafe_allow_html=True)
     st.markdown("### 📜 历史记录")
     
     output_dir = Path("output")
@@ -937,10 +1109,11 @@ def render_history_workspace():
 
 
 def render_settings_workspace():
-    """渲染系统设置工作区"""
-    st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
+    """渲染系统设置工作区 - 优化版"""
+    st.markdown('<div class="workspace-primary">', unsafe_allow_html=True)
     st.markdown("### 🔧 系统设置")
     
+    st.markdown('<div class="workspace-secondary">', unsafe_allow_html=True)
     st.markdown("#### 📊 系统信息")
     
     col1, col2 = st.columns(2)
@@ -948,9 +1121,9 @@ def render_settings_workspace():
         st.metric("Python 版本", f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
     with col2:
         st.metric("工作目录", str(Path.cwd()))
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    st.divider()
-    
+    st.markdown('<div class="workspace-secondary">', unsafe_allow_html=True)
     st.markdown("#### 🗂️ 项目文件")
     
     project_files = [
@@ -971,10 +1144,11 @@ def render_settings_workspace():
             st.write(f"❌ {file} (不存在)")
     
     st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def main():
-    """主函数"""
+    """主函数 - 优化版"""
     init_industrial_session()
     
     st.set_page_config(
@@ -985,6 +1159,7 @@ def main():
     )
     
     apply_industrial_theme()
+    render_brand_header()
     render_sidebar()
     
     current_ws = st.session_state.current_workspace

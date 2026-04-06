@@ -5,11 +5,6 @@ import time
 from .logger import logger
 
 class SQLiteMemoryPalace:
-    """
-    V3.0工业级SQLite记忆宫殿
-    兼容原有JSON数据自动迁移，零感知升级
-    核心特性：行级锁、O(1)查询、原子事务、零膨胀、老设备极致优化
-    """
     def __init__(self, novel_name="默认小说"):
         self.novel_name = novel_name
         self.base_dir = os.path.join("novel_settings", novel_name)
@@ -17,15 +12,12 @@ class SQLiteMemoryPalace:
         self.db_path = os.path.join(self.base_dir, "memory.db")
         self.old_json_path = os.path.join(self.base_dir, "03-动态剧情记忆.json")
         
-        # 僵尸锁清理+数据库初始化
         self._clear_stale_lock()
         self._init_db()
-        # 自动迁移旧JSON数据
         self._migrate_old_json_data()
         self._init_fixed_memory()
 
     def _clear_stale_lock(self):
-        """SQLite锁文件清理，兼容系统自动生成的锁文件"""
         lock_files = [f"{self.db_path}-lock", f"{self.db_path}-journal"]
         for lock_file in lock_files:
             if os.path.exists(lock_file):
@@ -38,9 +30,7 @@ class SQLiteMemoryPalace:
                         logger.error(f"清理锁文件失败：{e}")
 
     def _init_db(self):
-        """初始化数据库表与索引，极致优化查询性能"""
         with sqlite3.connect(self.db_path, timeout=15.0, check_same_thread=False) as conn:
-            # 章节记忆主表
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS chapter_memory (
                     chapter_num INTEGER PRIMARY KEY,
@@ -50,16 +40,14 @@ class SQLiteMemoryPalace:
                     generate_time DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            # 倒序查询索引，O(1)获取最新章节
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_chapter_desc
+                CREATE INDEX IF NOT EXISTS idx_chapter_desc 
                 ON chapter_memory (chapter_num DESC)
             """)
             conn.commit()
         logger.info(f"✅ SQLite记忆宫殿初始化完成：{self.db_path}")
 
     def _migrate_old_json_data(self):
-        """自动迁移旧JSON数据到SQLite，零感知升级，不丢数据"""
         if not os.path.exists(self.old_json_path):
             return
         try:
@@ -72,47 +60,43 @@ class SQLiteMemoryPalace:
             with sqlite3.connect(self.db_path, timeout=15.0) as conn:
                 for ch in chapters:
                     conn.execute("""
-                        INSERT OR IGNORE INTO chapter_memory
+                        INSERT OR IGNORE INTO chapter_memory 
                         (chapter_num, summary, word_count) VALUES (?, ?, ?)
                     """, (ch.get("num"), ch.get("summary"), ch.get("words", 0)))
                 conn.commit()
             
-            # 迁移完成后备份旧文件，不删除
             os.rename(self.old_json_path, f"{self.old_json_path}.bak.migrated")
             logger.info(f"✅ 旧JSON数据迁移完成，共迁移{len(chapters)}章历史数据")
         except Exception as e:
             logger.error(f"旧JSON数据迁移失败：{e}")
 
     def _init_fixed_memory(self):
-        """加载只读固定设定，与原有逻辑完全兼容"""
         self.fixed_memory = {}
         for key, fname in [
-            ("outline", "00-全本大纲.md"),
-            ("character", "01-人物档案.md"),
+            ("outline", "00-全本大纲.md"), 
+            ("character", "01-人物档案.md"), 
             ("worldview", "02-世界观设定.md")
         ]:
             fpath = os.path.join(self.base_dir, fname)
             if os.path.exists(fpath):
-                with open(fpath, "r", encoding="utf-8") as f:
+                with open(fpath, "r", encoding="utf-8") as f: 
                     self.fixed_memory[key] = f.read()
 
     def get_fixed_prompt(self):
-        """与原有接口完全兼容，零修改升级"""
         return "\n".join([f"## {k.upper()}\n{v}" for k, v in self.fixed_memory.items() if v])
 
     def get_dynamic_prompt(self, limit=3):
-        """SQL极速倒序查询最新3章，时间复杂度O(1)，与原有接口完全兼容"""
         try:
             with sqlite3.connect(self.db_path, check_same_thread=False) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT chapter_num, summary
-                    FROM chapter_memory
-                    ORDER BY chapter_num DESC
+                    SELECT chapter_num, summary 
+                    FROM chapter_memory 
+                    ORDER BY chapter_num DESC 
                     LIMIT ?
                 """, (limit,))
                 rows = cursor.fetchall()
-                if not rows:
+                if not rows: 
                     return "无前置剧情"
                 return "\n".join([f"第{r[0]}章: {r[1]}" for r in reversed(rows)])
         except Exception as e:
@@ -120,15 +104,14 @@ class SQLiteMemoryPalace:
             return "无前置剧情"
 
     def safe_update(self, chapter_num, summary, word_count, full_content=None):
-        """SQLite原生原子事务UPSERT，防冲突、断电零丢数据，与原有接口完全兼容"""
         try:
             with sqlite3.connect(self.db_path, timeout=15.0, check_same_thread=False) as conn:
                 conn.execute("""
-                    INSERT INTO chapter_memory (chapter_num, summary, word_count, full_content)
+                    INSERT INTO chapter_memory (chapter_num, summary, word_count, full_content) 
                     VALUES (?, ?, ?, ?)
-                    ON CONFLICT(chapter_num) DO UPDATE SET
-                    summary=excluded.summary,
-                    word_count=excluded.word_count,
+                    ON CONFLICT(chapter_num) DO UPDATE SET 
+                    summary=excluded.summary, 
+                    word_count=excluded.word_count, 
                     full_content=excluded.full_content,
                     generate_time=CURRENT_TIMESTAMP
                 """, (chapter_num, summary, word_count, full_content))
@@ -140,22 +123,16 @@ class SQLiteMemoryPalace:
             raise e
 
     def get_chapter_history(self, limit=100):
-        """获取完整章节历史，用于UI展示"""
         try:
             with sqlite3.connect(self.db_path, check_same_thread=False) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT chapter_num, summary, word_count, generate_time
-                    FROM chapter_memory
-                    ORDER BY chapter_num DESC
+                    SELECT chapter_num, summary, word_count, generate_time 
+                    FROM chapter_memory 
+                    ORDER BY chapter_num DESC 
                     LIMIT ?
                 """, (limit,))
                 return cursor.fetchall()
         except Exception as e:
             logger.error(f"获取章节历史失败：{e}")
             return []
-
-SimpleMemoryPalace = SQLiteMemoryPalace
-
-def get_memory_palace(novel_name="默认小说"):
-    return SimpleMemoryPalace(novel_name)

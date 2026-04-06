@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   cyber-printer:
     build: .
@@ -8,15 +7,13 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      # 核心数据挂载到宿主机，容器销毁不丢数据
       - ./novel_settings:/app/novel_settings
       - ./output:/app/output
       - ./logs:/app/logs
-      - ./.env:/app/.env:ro  # 配置文件只读挂载，更安全
+      - ./.env:/app/.env:ro
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
-    # 老iMac资源限制，避免卡死设备
     deploy:
       resources:
         limits:
@@ -25,7 +22,6 @@ services:
         reservations:
           cpus: '0.5'
           memory: 1G
-    # 日志轮转，避免日志文件无限膨胀
     logging:
       driver: "json-file"
       options:
