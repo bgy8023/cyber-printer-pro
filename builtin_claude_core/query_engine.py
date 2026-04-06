@@ -54,6 +54,17 @@ class AsyncQueryEngine:
         final_content = await self.call_llm_async(final_prompt, "你是网文白金主笔。严格遵守 XML 边界创作。")
         return {"outline": outline, "review": review, "content": final_content, "real_chars": len(final_content)}
 
+    def call_llm_sync(self, user_prompt: str, system_prompt: str = "你是专业助手", stream: bool = False) -> str:
+        """
+        Google级安全同步包装器，零冲突适配Streamlit容器
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(self.call_llm_async(user_prompt, system_prompt))
+
     def parallel_coordinate(self, chapter_num: int, target_words: int, fixed_memory: str, dynamic_memory: str, custom_prompt: str):
         try:
             loop = asyncio.get_event_loop()
