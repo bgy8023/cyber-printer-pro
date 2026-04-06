@@ -575,81 +575,183 @@ def render_config_workspace():
 
 
 def render_llm_workspace():
-    """渲染大模型配置工作区"""
+    """渲染大模型配置工作区（小白友好版）"""
     st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
     st.markdown("### 🤖 大模型配置")
     
     config = st.session_state.llm_config
     
-    llm_provider = st.selectbox(
-        "LLM 提供商", 
-        ["OpenAI", "Anthropic", "DeepSeek", "MiniMax", "自定义"],
-        index=["OpenAI", "Anthropic", "DeepSeek", "MiniMax", "自定义"].index(config['provider']) if config['provider'] in ["OpenAI", "Anthropic", "DeepSeek", "MiniMax", "自定义"] else 0
+    # 预设服务商配置
+    provider_presets = {
+        "🔮 DeepSeek（推荐）": {
+            "api_base": "https://api.deepseek.com/v1",
+            "models": ["deepseek-chat", "deepseek-coder"]
+        },
+        "🧠 OpenAI": {
+            "api_base": "https://api.openai.com/v1",
+            "models": ["gpt-4o", "gpt-4", "gpt-3.5-turbo"]
+        },
+        "🎯 豆包（ByteDance）": {
+            "api_base": "https://ark.cn-beijing.volces.com/api/v3",
+            "models": ["ep-20240603010101-xxxxx"]
+        },
+        "📚 智谱 AI": {
+            "api_base": "https://open.bigmodel.cn/api/paas/v4",
+            "models": ["glm-4", "glm-3-turbo"]
+        },
+        "🔧 自定义": {
+            "api_base": "https://api.example.com/v1",
+            "models": ["custom-model"]
+        }
+    }
+    
+    provider_display_names = list(provider_presets.keys())
+    
+    # 把 config['provider'] 转换为预设显示名
+    current_provider_display = "🔮 DeepSeek（推荐）"
+    for display_name in provider_presets:
+        if config['provider'].lower() in display_name.lower():
+            current_provider_display = display_name
+            break
+    
+    selected_provider = st.selectbox(
+        "🎁 选择大模型服务商", 
+        provider_display_names,
+        index=provider_display_names.index(current_provider_display) if current_provider_display in provider_display_names else 0,
+        help="选择你常用的服务商，我们会自动填好默认配置"
     )
+    
+    # 获取选中的预设
+    preset = provider_presets[selected_provider]
     
     st.markdown('<div style="background: #0f172a; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem;">', unsafe_allow_html=True)
-    st.markdown("#### 🔑 API 配置")
+    st.markdown("#### 🔑 API 密钥配置")
     
     api_key = st.text_input(
-        "API Key", 
+        "API Key（必填）", 
         type="password", 
         value=config['api_key'],
-        placeholder="sk-..."
+        placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
     )
-    api_base = st.text_input(
-        "API Base URL", 
-        value=config['api_base'],
-        placeholder="https://api.example.com/v1"
-    )
-    api_model = st.text_input(
-        "Model", 
-        value=config['model'],
-        placeholder="gpt-4, claude-3, etc."
-    )
+    
+    # 根据预设自动填充 API Base
+    auto_api_base = preset['api_base']
+    if selected_provider == "🔧 自定义":
+        api_base = st.text_input(
+            "API Base URL", 
+            value=config['api_base'] or auto_api_base,
+            placeholder="https://api.example.com/v1"
+        )
+    else:
+        api_base = auto_api_base
+        st.info(f"✅ 已自动设置 API Base：{api_base}")
+    
+    # 根据预设自动填充模型选择
+    available_models = preset['models']
+    if selected_provider != "🔧 自定义" and config['model'] not in available_models:
+        api_model = st.selectbox(
+            "🤖 选择模型", 
+            available_models,
+            index=0
+        )
+    else:
+        if selected_provider == "🔧 自定义":
+            api_model = st.text_input(
+                "模型名称", 
+                value=config['model'] or "custom-model",
+                placeholder="gpt-4, claude-3, etc."
+            )
+        else:
+            # 已有模型在预设中，让用户选择
+            api_model = st.selectbox(
+                "🤖 选择模型", 
+                available_models,
+                index=available_models.index(config['model']) if config['model'] in available_models else 0
+            )
     
     st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown('<div style="background: #0f172a; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem;">', unsafe_allow_html=True)
-    st.markdown("#### ⚙️ 生成参数")
+    st.markdown("#### ⚙️ 生成参数（新手推荐使用默认值）")
+    
+    # 预设参数配置
+    param_presets = {
+        "🎨 创意写作": {"temperature": 0.9, "top_p": 0.95, "desc": "适合小说、故事等创意内容"},
+        "📝 平衡模式": {"temperature": 0.7, "top_p": 0.9, "desc": "适合大多数场景，推荐新手使用"},
+        "🎯 精准回答": {"temperature": 0.3, "top_p": 0.8, "desc": "适合代码、问答等需要精确性的场景"}
+    }
+    
+    preset_names = list(param_presets.keys())
+    selected_preset = st.selectbox(
+        "🎁 选择参数预设", 
+        preset_names,
+        index=1,
+        help="选择一个预设，我们会自动填好推荐的参数"
+    )
+    
+    preset = param_presets[selected_preset]
     
     col1, col2 = st.columns(2)
     with col1:
         temperature = st.slider(
-            "Temperature", 
+            "🌡️ 创意程度 (Temperature)", 
             0.0, 2.0, 
-            config['temperature'], 
-            0.1
+            config['temperature'] if 'temperature' in config else preset['temperature'], 
+            0.1,
+            help="数值越大越有创意，数值越小越精确"
         )
+        st.caption(f"💡 推荐值：{preset['temperature']}")
+        
         top_p = st.slider(
-            "Top-P", 
+            "📊 采样范围 (Top-P)", 
             0.1, 1.0, 
-            config['top_p'], 
-            0.05
+            config['top_p'] if 'top_p' in config else preset['top_p'], 
+            0.05,
+            help="控制模型选择词汇的范围"
         )
+        st.caption(f"💡 推荐值：{preset['top_p']}")
     with col2:
         max_tokens = st.number_input(
-            "Max Tokens", 
+            "✍️ 单次最大输出字数 (Max Tokens)", 
             min_value=1000, 
             max_value=100000, 
-            value=config['max_tokens'], 
-            step=1000
+            value=config['max_tokens'] if 'max_tokens' in config else 15000, 
+            step=1000,
+            help="模型一次最多生成多少字"
         )
+        st.caption("💡 推荐值：15000（约 10000 汉字）")
+        
         max_retries = st.number_input(
-            "重试次数", 
+            "🔄 失败重试次数", 
             min_value=1, 
             max_value=10, 
-            value=config['max_retries']
+            value=config['max_retries'] if 'max_retries' in config else 3,
+            help="生成失败时自动重试的次数"
         )
+        st.caption("💡 推荐值：3")
     
     st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown('<div style="background: #0f172a; border-radius: 8px; padding: 1rem;">', unsafe_allow_html=True)
     st.markdown("#### 💾 保存配置")
     
-    if st.button("💾 保存到 .env", type="primary"):
+    if st.button("💾 保存到 .env", type="primary", use_container_width=True):
         # 更新 st.session_state
+        # 提取服务商名称（去掉 emoji）
+        provider_name = selected_provider
+        if "DeepSeek" in selected_provider:
+            provider_name = "DeepSeek"
+        elif "OpenAI" in selected_provider:
+            provider_name = "OpenAI"
+        elif "豆包" in selected_provider:
+            provider_name = "ByteDance"
+        elif "智谱" in selected_provider:
+            provider_name = "Zhipu"
+        else:
+            provider_name = "Custom"
+        
         st.session_state.llm_config.update({
-            'provider': llm_provider,
+            'provider': provider_name,
             'api_key': api_key,
             'api_base': api_base,
             'model': api_model,
