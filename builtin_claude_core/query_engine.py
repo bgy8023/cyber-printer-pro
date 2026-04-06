@@ -30,8 +30,7 @@ class AsyncQueryEngine:
                     api_key=self.api_key,
                     base_url=self.base_url,
                     temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    timeout=self.timeout
+                    max_tokens=self.max_tokens
                 )
                 return response.choices[0].message.content.strip()
             except RateLimitError:
