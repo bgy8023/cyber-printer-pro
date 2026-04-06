@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-工业级 Web 面板 - 完整版（包含所有小说功能）
-基于 GitHub 成熟方案 (⭐38.7k Stars)
+工业级 Web 面板 - 精简稳定版
+OpenMars 工业级 AI 助手
 """
 import streamlit as st
 from datetime import datetime
@@ -11,17 +11,6 @@ import os
 import re
 
 sys.path.insert(0, str(Path(__file__).parent))
-
-# 已删除的模块（暂时禁用）
-# from ai_assistant import (
-#     init_session_state,
-#     save_current_chat,
-#     get_memory_manager,
-#     handle_command
-# )
-# from agent_orchestrator import get_orchestrator
-# from self_improver import get_self_improver
-# from ai_tools import get_tool_statistics
 
 
 def init_industrial_session():
@@ -33,14 +22,16 @@ def init_industrial_session():
     if 'theme_mode' not in st.session_state:
         st.session_state.theme_mode = 'dark'
     
-    if 'state' not in st.session_state:
-        from state.manager import StateManager
-        st.session_state.state = StateManager()
-        st.session_state.state.load_current_chapter()
     if 'current_workspace' not in st.session_state:
         st.session_state.current_workspace = 'chat'
     
-    # 初始化 LLM 配置到 st.session_state
+    if 'current_chapter' not in st.session_state:
+        st.session_state.current_chapter = 1
+    if 'target_words' not in st.session_state:
+        st.session_state.target_words = 7500
+    if 'selected_novel' not in st.session_state:
+        st.session_state.selected_novel = "默认小说"
+    
     if 'llm_config' not in st.session_state:
         from dotenv import load_dotenv
         load_dotenv()
@@ -63,15 +54,15 @@ def save_panel_settings():
     
     settings_file = Path("panel_settings.json")
     
-    # 收集所有需要保存的设置
     settings = {
         "llm_config": st.session_state.get("llm_config", {}),
         "current_workspace": st.session_state.get("current_workspace", "chat"),
         "theme_mode": st.session_state.get("theme_mode", "dark"),
+        "current_chapter": st.session_state.get("current_chapter", 1),
+        "target_words": st.session_state.get("target_words", 7500),
         "save_time": datetime.now().isoformat()
     }
     
-    # 原子写入：先写入临时文件，再替换
     try:
         with tempfile.NamedTemporaryFile('w', dir=str(settings_file.parent), delete=False, encoding='utf-8') as f:
             json.dump(settings, f, ensure_ascii=False, indent=2)
@@ -96,13 +87,16 @@ def load_panel_settings():
         with open(settings_file, 'r', encoding='utf-8') as f:
             settings = json.load(f)
         
-        # 加载设置到 st.session_state
         if "llm_config" in settings:
             st.session_state.llm_config = settings["llm_config"]
         if "current_workspace" in settings:
             st.session_state.current_workspace = settings["current_workspace"]
         if "theme_mode" in settings:
             st.session_state.theme_mode = settings["theme_mode"]
+        if "current_chapter" in settings:
+            st.session_state.current_chapter = settings["current_chapter"]
+        if "target_words" in settings:
+            st.session_state.target_words = settings["target_words"]
         
         return True, f"设置已从 {settings_file} 加载"
     except Exception as e:
@@ -310,19 +304,13 @@ def render_sidebar():
         workspaces = {
             'chat': {'icon': '💬', 'name': 'AI 助手', 'desc': '对话管理'},
             'quick': {'icon': '⚡', 'name': '快速模式', 'desc': '30秒上手'},
-            'config': {'icon': '⚙️', 'name': '生成配置', 'desc': '详细参数'},
             'llm': {'icon': '🤖', 'name': '大模型配置', 'desc': 'API设置'},
-            'skills': {'icon': '🎯', 'name': '技能配置', 'desc': '专业技能'},
-            'agents': {'icon': '👥', 'name': '智能体配置', 'desc': '协作模式'},
-            'tools': {'icon': '🛠️', 'name': '工具配置', 'desc': '创作工具'},
             'history': {'icon': '📜', 'name': '历史记录', 'desc': '已生成章节'},
             'settings': {'icon': '🔧', 'name': '系统设置', 'desc': '高级选项'}
         }
         
         for ws_id, ws_info in workspaces.items():
             is_active = st.session_state.current_workspace == ws_id
-            btn_class = "workspace-btn active" if is_active else "workspace-btn"
-            
             if st.button(
                 f"{ws_info['icon']} {ws_info['name']}",
                 key=f"ws_{ws_id}",
@@ -335,19 +323,12 @@ def render_sidebar():
         
         st.markdown("### 📊 状态")
         
-        chapter_num_file = os.path.expanduser("~/OpenMars_Arch/current_chapter.txt")
-        current_chapter = "1"
-        if os.path.exists(chapter_num_file):
-            with open(chapter_num_file, "r") as f:
-                current_chapter = f.read().strip() or "1"
-        
-        from utils.helpers import get_resource_path
-        output_dir = get_resource_path("output")
+        output_dir = Path("output")
         file_count = 0
-        if os.path.exists(output_dir):
+        if output_dir.exists():
             file_count = len([f for f in os.listdir(output_dir) if f.endswith('.md')])
         
-        st.metric("当前章节", f"第 {current_chapter} 章")
+        st.metric("当前章节", f"第 {st.session_state.current_chapter} 章")
         st.metric("已生成", f"{file_count} 章")
         
         st.divider()
@@ -409,28 +390,24 @@ def render_chat_workspace():
 - `/novel words N` - 设置目标字数（如：/novel words 10000）
 """
             elif cmd == '/status':
-                state = st.session_state.state
-                
-                from utils.helpers import get_resource_path
-                output_dir = get_resource_path("output")
+                output_dir = Path("output")
                 file_count = 0
-                if os.path.exists(output_dir):
+                if output_dir.exists():
                     file_count = len([f for f in os.listdir(output_dir) if f.endswith('.md')])
                 
                 return f"""**项目状态：**
-- 当前章节：第 {state.current_chapter} 章
+- 当前章节：第 {st.session_state.current_chapter} 章
 - 已生成：{file_count} 章
 - 工作区：{st.session_state.current_workspace}
-- 目标字数：{state.target_words} 字
-- 小说：{state.selected_novel}
+- 目标字数：{st.session_state.target_words} 字
+- 小说：{st.session_state.selected_novel}
 """
             elif cmd.startswith('/novel chapter'):
                 parts = cmd.split()
                 if len(parts) == 3:
                     try:
                         chapter = int(parts[2])
-                        state = st.session_state.state
-                        state.current_chapter = chapter
+                        st.session_state.current_chapter = chapter
                         return f"✅ 章节号已设置为：第 {chapter} 章"
                     except ValueError:
                         return "❌ 请输入有效的章节号（数字）"
@@ -441,29 +418,25 @@ def render_chat_workspace():
                 if len(parts) == 3:
                     try:
                         words = int(parts[2])
-                        state = st.session_state.state
-                        state.target_words = words
+                        st.session_state.target_words = words
                         return f"✅ 目标字数已设置为：{words} 字"
                     except ValueError:
                         return "❌ 请输入有效的字数（数字）"
                 else:
                     return "❌ 用法：/novel words <目标字数>"
             elif cmd.startswith('/novel generate'):
-                state = st.session_state.state
-                
-                return f"""🚀 正在准备生成第 {state.current_chapter} 章...
+                return f"""🚀 正在准备生成第 {st.session_state.current_chapter} 章...
 请前往 ⚡ 快速模式 工作区点击生成按钮！
-或者直接对我说："生成第 {state.current_chapter} 章"
+或者直接对我说："生成第 {st.session_state.current_chapter} 章"
 """
             elif cmd == '/clear':
                 st.session_state.chat_messages = []
                 return "✅ 对话历史已清空！"
             
             elif cmd.startswith('/novel list'):
-                from utils.helpers import get_resource_path
-                output_dir = get_resource_path("output")
+                output_dir = Path("output")
                 
-                if os.path.exists(output_dir):
+                if output_dir.exists():
                     files = sorted([f for f in os.listdir(output_dir) if f.endswith('.md')], reverse=True)
                     if files:
                         file_list = "\n".join([f"- {f}" for f in files[:20]])
@@ -495,21 +468,17 @@ def render_chat_workspace():
                 
                 return config_info
             
-            # 自然语言理解：生成第 N 章
             chapter_match = re.search(r'(?:生成|写|来)第\s*(\d+)\s*章', cmd)
             if chapter_match:
                 chapter = int(chapter_match.group(1))
-                state = st.session_state.state
-                state.current_chapter = chapter
+                st.session_state.current_chapter = chapter
                 return f"""✅ 已设置为第 {chapter} 章！
 请前往 ⚡ 快速模式 工作区点击生成按钮！"""
             
-            # 自然语言理解：设置目标字数
             words_match = re.search(r'(?:写|来|目标)\s*(\d+)\s*字', cmd)
             if words_match:
                 words = int(words_match.group(1))
-                state = st.session_state.state
-                state.target_words = words
+                st.session_state.target_words = words
                 return f"✅ 目标字数已设置为：{words} 字"
             
             return None
@@ -559,8 +528,6 @@ def render_chat_workspace():
 
 def render_quick_workspace():
     """渲染快速模式工作区"""
-    state = st.session_state.state
-    
     col1, col2 = st.columns([3, 1])
     
     with col1:
@@ -570,8 +537,8 @@ def render_quick_workspace():
         
         c1, c2 = st.columns(2)
         with c1:
-            chapter_num = st.number_input("📖 章节号", min_value=1, max_value=9999, value=state.current_chapter)
-            target_words = st.number_input("✍️ 目标字数", min_value=500, max_value=50000, value=7500, step=500)
+            chapter_num = st.number_input("📖 章节号", min_value=1, max_value=9999, value=st.session_state.current_chapter)
+            target_words = st.number_input("✍️ 目标字数", min_value=500, max_value=50000, value=st.session_state.target_words, step=500)
         
         with c2:
             target_platform = st.selectbox("📱 目标平台", ["番茄小说", "起点中文网", "晋江文学城", "纵横中文网", "飞卢小说网"])
@@ -586,17 +553,12 @@ def render_quick_workspace():
         st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
         st.markdown("### 🚀 一键生成")
         
-        enable_skills = st.checkbox("🎯 技能增强", value=True)
-        enable_multi_agent = st.checkbox("👥 多智能体", value=True)
-        enable_humanizer = st.checkbox("🧹 去AI化", value=True)
-        
         st.divider()
         
         lazy_btn = st.button("🔥 一键躺平生成", type="primary", use_container_width=True)
         
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # 实时日志和进度显示区域
     st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
     st.markdown("### 📋 任务进度")
     
@@ -613,7 +575,6 @@ def render_quick_workspace():
                 st.markdown("#### 📝 实时日志")
                 log_placeholder = st.empty()
             
-            # 构建完整的生成指令
             full_prompt = f"""
 写一部{genre}小说，风格是{writing_style}，适合在{target_platform}发布。
 
@@ -629,7 +590,6 @@ def render_quick_workspace():
                 log_placeholder.info(f"🎨 类型：{genre}")
                 log_placeholder.info(f"✒️ 风格：{writing_style}")
             
-            # 尝试调用生成
             try:
                 from cyber_printer_ultimate import generate_chapter_full
                 
@@ -653,11 +613,9 @@ def render_quick_workspace():
                     st.markdown("#### 📄 生成结果")
                     st.text_area("章节内容", value=result_content, height=400)
                     
-                    # 保存到文件
-                    from datetime import datetime
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     output_dir = Path("output")
                     output_dir.mkdir(exist_ok=True)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     output_file = output_dir / f"第{chapter_num}章_{timestamp}.md"
                     
                     with open(output_file, 'w', encoding='utf-8') as f:
@@ -665,8 +623,7 @@ def render_quick_workspace():
                     
                     st.success(f"✅ 文件已保存到：{output_file}")
                     
-                    # 更新当前章节
-                    state.current_chapter = chapter_num + 1
+                    st.session_state.current_chapter = chapter_num + 1
                     
                 else:
                     status_text.text("❌ 生成失败！")
@@ -695,34 +652,6 @@ def render_quick_workspace():
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def render_config_workspace():
-    """渲染生成配置工作区"""
-    state = st.session_state.state
-    
-    st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
-    st.markdown("### ⚙️ 生成配置")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        chapter_num = st.number_input("章节号", min_value=1, max_value=9999, value=state.current_chapter)
-        target_words = st.number_input("目标字数", min_value=500, max_value=50000, value=7500, step=500)
-        min_words = st.number_input("最小字数", min_value=100, max_value=target_words, value=max(100, target_words - 1000), step=100)
-        chapter_title = st.text_input("章节标题（可选）", placeholder="例如：第1章 觉醒")
-    
-    with col2:
-        from utils.helpers import get_clawpanel_agents
-        agents = get_clawpanel_agents()
-        target_agent = st.selectbox("写作风格", agents if agents else ["default"])
-        temperature = st.slider("创造性（Temperature）", 0.0, 2.0, 0.7, 0.1)
-        top_p = st.slider("Top-P 采样", 0.1, 1.0, 0.9, 0.05)
-        max_tokens = st.number_input("Max Tokens", min_value=1000, max_value=100000, value=15000, step=1000)
-    
-    custom_prompt = st.text_area("自定义指令", height=100)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
 def render_llm_workspace():
     """渲染大模型配置工作区（小白友好版）"""
     st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
@@ -730,7 +659,6 @@ def render_llm_workspace():
     
     config = st.session_state.llm_config
     
-    # 预设服务商配置
     provider_presets = {
         "🔮 DeepSeek（推荐）": {
             "api_base": "https://api.deepseek.com/v1",
@@ -756,7 +684,6 @@ def render_llm_workspace():
     
     provider_display_names = list(provider_presets.keys())
     
-    # 把 config['provider'] 转换为预设显示名
     current_provider_display = "🔮 DeepSeek（推荐）"
     for display_name in provider_presets:
         if config['provider'].lower() in display_name.lower():
@@ -770,7 +697,6 @@ def render_llm_workspace():
         help="选择你常用的服务商，我们会自动填好默认配置"
     )
     
-    # 获取选中的预设
     preset = provider_presets[selected_provider]
     
     st.markdown('<div style="background: #0f172a; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem;">', unsafe_allow_html=True)
@@ -783,7 +709,6 @@ def render_llm_workspace():
         placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
     )
     
-    # 根据预设自动填充 API Base
     auto_api_base = preset['api_base']
     if selected_provider == "🔧 自定义":
         api_base = st.text_input(
@@ -795,7 +720,6 @@ def render_llm_workspace():
         api_base = auto_api_base
         st.info(f"✅ 已自动设置 API Base：{api_base}")
     
-    # 根据预设自动填充模型选择
     available_models = preset['models']
     if selected_provider != "🔧 自定义" and config['model'] not in available_models:
         api_model = st.selectbox(
@@ -811,7 +735,6 @@ def render_llm_workspace():
                 placeholder="gpt-4, claude-3, etc."
             )
         else:
-            # 已有模型在预设中，让用户选择
             api_model = st.selectbox(
                 "🤖 选择模型", 
                 available_models,
@@ -823,7 +746,6 @@ def render_llm_workspace():
     st.markdown('<div style="background: #0f172a; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem;">', unsafe_allow_html=True)
     st.markdown("#### ⚙️ 生成参数（新手推荐使用默认值）")
     
-    # 预设参数配置
     param_presets = {
         "🎨 创意写作": {"temperature": 0.9, "top_p": 0.95, "desc": "适合小说、故事等创意内容"},
         "📝 平衡模式": {"temperature": 0.7, "top_p": 0.9, "desc": "适合大多数场景，推荐新手使用"},
@@ -885,8 +807,6 @@ def render_llm_workspace():
     st.markdown("#### 💾 保存配置")
     
     if st.button("💾 保存到 .env", type="primary", use_container_width=True):
-        # 更新 st.session_state
-        # 提取服务商名称（去掉 emoji）
         provider_name = selected_provider
         if "DeepSeek" in selected_provider:
             provider_name = "DeepSeek"
@@ -910,7 +830,6 @@ def render_llm_workspace():
             'max_retries': max_retries
         })
         
-        # 保存到 .env
         env_path = ".env"
         lines = []
         if os.path.exists(env_path):
@@ -991,51 +910,14 @@ def render_llm_workspace():
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def render_skills_workspace():
-    """渲染技能配置工作区"""
-    st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
-    st.markdown("### 🎯 技能配置")
-    
-    skills_path = Path("novel_settings/skills")
-    if skills_path.exists():
-        skill_files = list(skills_path.glob("*.md"))
-        for skill_file in skill_files:
-            with st.expander(f"📚 {skill_file.stem}", expanded=False):
-                content = skill_file.read_text(encoding="utf-8")
-                st.markdown(content)
-    else:
-        st.info("技能目录不存在")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-def render_agents_workspace():
-    """渲染智能体配置工作区（暂时禁用）"""
-    st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
-    st.markdown("### 👥 智能体配置")
-    st.info("智能体功能暂时禁用，正在优化中...")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-def render_tools_workspace():
-    """渲染工具配置工作区"""
-    st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
-    st.markdown("### 🛠️ 工具配置")
-    
-    st.info("💡 工具统计功能已暂时禁用（模块已精简）")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
 def render_history_workspace():
     """渲染历史记录工作区"""
     st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
     st.markdown("### 📜 历史记录")
     
-    from utils.helpers import get_resource_path
-    output_dir = get_resource_path("output")
+    output_dir = Path("output")
     
-    if os.path.exists(output_dir):
+    if output_dir.exists():
         files = sorted([f for f in os.listdir(output_dir) if f.endswith('.md')], reverse=True)
         if files:
             for file in files[:20]:
@@ -1072,13 +954,12 @@ def render_settings_workspace():
     st.markdown("#### 🗂️ 项目文件")
     
     project_files = [
-        "ai_assistant.py",
-        "ai_tools.py",
-        "session_memory.py",
-        "agent_orchestrator.py",
-        "self_improver.py",
-        "enhanced_tools.py",
-        "web_panel_industrial.py"
+        "web_panel_industrial.py",
+        "cyber_printer_ultimate.py",
+        "builtin_claude_core/query_engine.py",
+        "builtin_claude_core/memory_palace.py",
+        "builtin_claude_core/llm_adapter.py",
+        "builtin_claude_core/logger.py"
     ]
     
     for file in project_files:
@@ -1095,7 +976,6 @@ def render_settings_workspace():
 def main():
     """主函数"""
     init_industrial_session()
-    # init_session_state()  # 已删除的模块
     
     st.set_page_config(
         page_title="🚀 OpenMars - 工业级 AI 助手",
@@ -1112,11 +992,7 @@ def main():
     workspaces = {
         'chat': {'icon': '💬', 'name': 'AI 助手', 'desc': '对话管理'},
         'quick': {'icon': '⚡', 'name': '快速模式', 'desc': '30秒上手'},
-        'config': {'icon': '⚙️', 'name': '生成配置', 'desc': '详细参数'},
         'llm': {'icon': '🤖', 'name': '大模型配置', 'desc': 'API设置'},
-        'skills': {'icon': '🎯', 'name': '技能配置', 'desc': '专业技能'},
-        'agents': {'icon': '👥', 'name': '智能体配置', 'desc': '协作模式'},
-        'tools': {'icon': '🛠️', 'name': '工具配置', 'desc': '创作工具'},
         'history': {'icon': '📜', 'name': '历史记录', 'desc': '已生成章节'},
         'settings': {'icon': '🔧', 'name': '系统设置', 'desc': '高级选项'}
     }
@@ -1128,16 +1004,8 @@ def main():
         render_chat_workspace()
     elif current_ws == 'quick':
         render_quick_workspace()
-    elif current_ws == 'config':
-        render_config_workspace()
     elif current_ws == 'llm':
         render_llm_workspace()
-    elif current_ws == 'skills':
-        render_skills_workspace()
-    elif current_ws == 'agents':
-        render_agents_workspace()
-    elif current_ws == 'tools':
-        render_tools_workspace()
     elif current_ws == 'history':
         render_history_workspace()
     elif current_ws == 'settings':
