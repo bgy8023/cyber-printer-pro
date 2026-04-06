@@ -18,6 +18,7 @@ class AsyncQueryEngine:
         self.max_retries = int(os.getenv("MAX_RETRY", "3"))
         self.temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
         self.max_tokens = int(os.getenv("LLM_MAX_TOKENS", "15000"))
+        self.timeout = int(os.getenv("LLM_TIMEOUT", "300"))
 
     async def call_llm_async(self, user_prompt: str, system_prompt: str) -> str:
         for i in range(self.max_retries):
@@ -29,7 +30,8 @@ class AsyncQueryEngine:
                     api_key=self.api_key,
                     base_url=self.base_url,
                     temperature=self.temperature,
-                    max_tokens=self.max_tokens
+                    max_tokens=self.max_tokens,
+                    timeout=self.timeout
                 )
                 return response.choices[0].message.content.strip()
             except RateLimitError:
