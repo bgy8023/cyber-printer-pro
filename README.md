@@ -1,4 +1,4 @@
-# 🚀 赛博印钞机 Pro V3.0 工业级终极封板
+# 🚀 OpenMars Pro V3.0 工业级终极封板
 
 基于 Streamlit + LiteLLM 的工业级小说创作 AI 助手，集成 P0级Token黑洞防护、工业级异步引擎、SQLite记忆宫殿、全链路告警。
 
@@ -174,4 +174,4 @@ MIT License，仅供学习研究使用。
 
 ---
 
-**赛博印钞机 Pro V3.0 祝您创作愉快！** 🎉
+**OpenMars Pro V3.0 祝您创作愉快！** 🎉
