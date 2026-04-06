@@ -12,7 +12,7 @@ def send_mobile_alert(title, content, is_error=False):
     try:
         icon = "🚨" if is_error else "🎉"
         full_title = f"{icon}{title}"
-        full_content = f"【OpenMarsPro】{content}"
+        full_content = f"【赛博印钞机Pro】{content}"
         
         if "bark" in webhook_url.lower():
             requests.get(f"{webhook_url}/{full_title}/{full_content}", timeout=5)
@@ -42,14 +42,14 @@ def generate_chapter_full(chapter_num, target_words, custom_prompt, novel_name="
             summary = result["content"][:150] + "..." if len(result["content"]) > 150 else result["content"]
             memory.safe_update(chapter_num, summary, result["real_chars"], result["content"])
             send_mobile_alert(
-                f"第{chapter_num}章生成完毕",
+                f"第{chapter_num}章生成完毕", 
                 f"实际字数：{result['real_chars']} | 目标：{target_words} | 小说：{novel_name}"
             )
             return True, result["content"]
             
         send_mobile_alert(
-            f"第{chapter_num}章生成异常",
-            "大模型返回内容为空",
+            f"第{chapter_num}章生成异常", 
+            "大模型返回内容为空", 
             is_error=True
         )
         return False, "大模型返回内容为空"
@@ -58,8 +58,8 @@ def generate_chapter_full(chapter_num, target_words, custom_prompt, novel_name="
         logger.error(f"生成失败: {e}", exc_info=True)
         error_msg = str(e)[:200]
         send_mobile_alert(
-            f"流水线严重崩溃",
-            f"第{chapter_num}章 | {error_msg}",
+            f"流水线严重崩溃", 
+            f"第{chapter_num}章 | {error_msg}", 
             is_error=True
         )
         return False, str(e)
