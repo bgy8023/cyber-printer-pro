@@ -544,6 +544,104 @@ def render_quick_workspace():
         lazy_btn = st.button("🔥 一键躺平生成", type="primary", use_container_width=True)
         
         st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 实时日志和进度显示区域
+    st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
+    st.markdown("### 📋 任务进度")
+    
+    if lazy_btn:
+        try:
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            log_container = st.container()
+            
+            status_text.text("🚀 正在初始化生成环境...")
+            progress_bar.progress(10)
+            
+            with log_container:
+                st.markdown("#### 📝 实时日志")
+                log_placeholder = st.empty()
+            
+            # 构建完整的生成指令
+            full_prompt = f"""
+写一部{genre}小说，风格是{writing_style}，适合在{target_platform}发布。
+
+{custom_prompt if custom_prompt else '请写出精彩的章节内容'}
+""".strip()
+            
+            status_text.text("🤖 正在调用大模型生成内容...")
+            progress_bar.progress(30)
+            
+            with log_container:
+                log_placeholder.info(f"📖 章节：第 {chapter_num} 章")
+                log_placeholder.info(f"✍️ 目标字数：{target_words} 字")
+                log_placeholder.info(f"🎨 类型：{genre}")
+                log_placeholder.info(f"✒️ 风格：{writing_style}")
+            
+            # 尝试调用生成
+            try:
+                from cyber_printer_ultimate import generate_chapter_full
+                
+                status_text.text("⚡ 正在生成章节内容（这可能需要几分钟）...")
+                progress_bar.progress(50)
+                
+                success, result_content = generate_chapter_full(
+                    chapter_num=chapter_num,
+                    target_words=target_words,
+                    custom_prompt=full_prompt,
+                    novel_name="默认小说"
+                )
+                
+                if success:
+                    status_text.text("✅ 生成成功！")
+                    progress_bar.progress(100)
+                    
+                    with log_container:
+                        log_placeholder.success(f"🎉 生成成功！实际字数：{len(result_content)} 字")
+                    
+                    st.markdown("#### 📄 生成结果")
+                    st.text_area("章节内容", value=result_content, height=400)
+                    
+                    # 保存到文件
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    output_dir = Path("output")
+                    output_dir.mkdir(exist_ok=True)
+                    output_file = output_dir / f"第{chapter_num}章_{timestamp}.md"
+                    
+                    with open(output_file, 'w', encoding='utf-8') as f:
+                        f.write(result_content)
+                    
+                    st.success(f"✅ 文件已保存到：{output_file}")
+                    
+                    # 更新当前章节
+                    state.current_chapter = chapter_num + 1
+                    
+                else:
+                    status_text.text("❌ 生成失败！")
+                    progress_bar.progress(100)
+                    
+                    with log_container:
+                        log_placeholder.error(f"❌ 生成失败：{result_content}")
+                    
+                    st.error(f"生成失败：{result_content}")
+                    
+            except ImportError as e:
+                status_text.text("⚠️ 生成模块未找到，显示演示内容")
+                progress_bar.progress(100)
+                
+                with log_container:
+                    log_placeholder.warning(f"⚠️ 演示模式：{e}")
+                
+                st.markdown("#### 📄 演示内容")
+                st.text_area("章节内容", value="这是演示内容，实际使用时请确保 cyber_printer_ultimate.py 存在且配置正确", height=200)
+                
+        except Exception as e:
+            st.error(f"生成过程中发生错误：{e}")
+            import traceback
+            st.text(traceback.format_exc())
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def render_config_workspace():
