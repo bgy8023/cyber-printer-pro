@@ -41,7 +41,7 @@ class SQLiteMemoryPalace:
                 )
             """)
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_chapter_desc 
+                CREATE INDEX IF NOT EXISTS idx_chapter_desc
                 ON chapter_memory (chapter_num DESC)
             """)
             conn.commit()
@@ -60,7 +60,7 @@ class SQLiteMemoryPalace:
             with sqlite3.connect(self.db_path, timeout=15.0) as conn:
                 for ch in chapters:
                     conn.execute("""
-                        INSERT OR IGNORE INTO chapter_memory 
+                        INSERT OR IGNORE INTO chapter_memory
                         (chapter_num, summary, word_count) VALUES (?, ?, ?)
                     """, (ch.get("num"), ch.get("summary"), ch.get("words", 0)))
                 conn.commit()
@@ -73,13 +73,13 @@ class SQLiteMemoryPalace:
     def _init_fixed_memory(self):
         self.fixed_memory = {}
         for key, fname in [
-            ("outline", "00-全本大纲.md"), 
-            ("character", "01-人物档案.md"), 
+            ("outline", "00-全本大纲.md"),
+            ("character", "01-人物档案.md"),
             ("worldview", "02-世界观设定.md")
         ]:
             fpath = os.path.join(self.base_dir, fname)
             if os.path.exists(fpath):
-                with open(fpath, "r", encoding="utf-8") as f: 
+                with open(fpath, "r", encoding="utf-8") as f:
                     self.fixed_memory[key] = f.read()
 
     def get_fixed_prompt(self):
@@ -90,13 +90,13 @@ class SQLiteMemoryPalace:
             with sqlite3.connect(self.db_path, check_same_thread=False) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT chapter_num, summary 
-                    FROM chapter_memory 
-                    ORDER BY chapter_num DESC 
+                    SELECT chapter_num, summary
+                    FROM chapter_memory
+                    ORDER BY chapter_num DESC
                     LIMIT ?
                 """, (limit,))
                 rows = cursor.fetchall()
-                if not rows: 
+                if not rows:
                     return "无前置剧情"
                 return "\n".join([f"第{r[0]}章: {r[1]}" for r in reversed(rows)])
         except Exception as e:
@@ -107,11 +107,11 @@ class SQLiteMemoryPalace:
         try:
             with sqlite3.connect(self.db_path, timeout=15.0, check_same_thread=False) as conn:
                 conn.execute("""
-                    INSERT INTO chapter_memory (chapter_num, summary, word_count, full_content) 
+                    INSERT INTO chapter_memory (chapter_num, summary, word_count, full_content)
                     VALUES (?, ?, ?, ?)
-                    ON CONFLICT(chapter_num) DO UPDATE SET 
-                    summary=excluded.summary, 
-                    word_count=excluded.word_count, 
+                    ON CONFLICT(chapter_num) DO UPDATE SET
+                    summary=excluded.summary,
+                    word_count=excluded.word_count,
                     full_content=excluded.full_content,
                     generate_time=CURRENT_TIMESTAMP
                 """, (chapter_num, summary, word_count, full_content))
@@ -127,9 +127,9 @@ class SQLiteMemoryPalace:
             with sqlite3.connect(self.db_path, check_same_thread=False) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT chapter_num, summary, word_count, generate_time 
-                    FROM chapter_memory 
-                    ORDER BY chapter_num DESC 
+                    SELECT chapter_num, summary, word_count, generate_time
+                    FROM chapter_memory
+                    ORDER BY chapter_num DESC
                     LIMIT ?
                 """, (limit,))
                 return cursor.fetchall()
