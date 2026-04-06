@@ -1,14 +1,16 @@
 #!/bin/bash
 # =============================================
-# 赛博印钞机 Pro - Web 面板一键启动
+# 赛博印钞机 Pro - 工业级 Web 面板
+# 基于 GitHub 成熟方案 (⭐38.7k Stars)
 # =============================================
 
 echo "================================================"
-echo "  赛博印钞机 Pro - Web 面板"
+echo "  🚀 赛博印钞机 Pro - 工业级 AI 助手"
+echo "  基于 Streamlit (⭐38.7k Stars) 最佳实践"
 echo "================================================"
 echo ""
-echo "正在启动..."
+echo "正在启动工业级 Web 面板..."
 echo ""
 
 cd /Users/mars/cyber-printer-pro
-streamlit run web_panel_ultimate.py
+streamlit run web_panel_industrial.py

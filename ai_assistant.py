@@ -8,9 +8,10 @@ from datetime import datetime
 import os
 import json
 import subprocess
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from pathlib import Path
 import sys
+import time
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -147,7 +148,17 @@ from security_guard import (
 from ai_tools import (
     parse_tool_call,
     execute_tool,
-    get_system_prompt_with_tools
+    get_system_prompt_with_tools,
+    get_tool_statistics
+)
+from session_memory import get_memory_manager
+from agent_orchestrator import get_orchestrator
+from self_improver import get_self_improver, ImprovementCategory
+from enhanced_tools import (
+    web_search,
+    web_fetch,
+    api_request,
+    extract_file_text
 )
 
 def init_session_state():
@@ -270,9 +281,15 @@ def render_file_tree(items: List[Dict], parent_key: str = ""):
             st.rerun()
 
 def save_current_chat():
-    """保存当前对话到历史"""
+    """保存当前对话到历史（同时保存到持久化记忆）"""
     if st.session_state.chat_messages:
         st.session_state.chat_history[st.session_state.current_chat_id] = st.session_state.chat_messages.copy()
+        
+        mm = get_memory_manager()
+        chat_id = st.session_state.current_chat_id
+        
+        for msg in st.session_state.chat_messages:
+            mm.add_message(chat_id, msg["role"], msg["content"])
 
 def build_context_info() -> str:
     """构建上下文信息"""
@@ -370,6 +387,24 @@ def handle_command(cmd: str) -> str:
 - `/clear` - 清空当前对话
 - `/status` - 查看当前状态
 - `/context` - 查看当前上下文
+- `/tools stats` - 查看工具调用统计信息
+- `/memory list` - 列出所有会话
+- `/memory add <内容>` - 添加关键记忆
+- `/memory context` - 查看当前会话上下文
+- `/agent list` - 列出所有智能体
+- `/agent set <名称>` - 设置当前智能体
+- `/agent current` - 查看当前智能体
+- `/agent handoff <目标> [原因]` - 转交任务给其他智能体
+- `/improve status` - 查看改进状态
+- `/improve list [状态]` - 列出改进（pending/completed）
+- `/improve add <分类> <描述> [优先级]` - 添加改进
+- `/improve next` - 获取下一个待处理改进
+- `/improve complete <ID> <结果>` - 完成改进
+- `/web search <查询> [数量]` - 联网搜索
+- `/web fetch <URL>` - 抓取网页内容
+- `/file read <文件路径>` - 读取文件内容（支持 PDF/Word/Excel/PPT）
+- `/api get <URL> [数据]` - 发送 GET 请求
+- `/api post <URL> <JSON数据>` - 发送 POST 请求
 
 **📁 项目管理：**
 - `/project info` - 查看项目信息
@@ -502,6 +537,357 @@ def handle_command(cmd: str) -> str:
     
     elif cmd == '/context':
         return f"**🔍 当前上下文信息：**\n\n{build_context_info()}"
+    
+    elif cmd == '/tools stats':
+        stats = get_tool_statistics()
+        global_stats = stats['global']
+        by_tool = stats['by_tool']
+        
+        tool_list = []
+        for tool_name, tool_stat in by_tool.items():
+            tool_list.append(f"""**{tool_name}**:
+  - 调用次数: {tool_stat['total_calls']}
+  - 成功: {tool_stat['successful_calls']}
+  - 失败: {tool_stat['failed_calls']}
+  - 成功率: {tool_stat['success_rate']}
+  - 平均耗时: {tool_stat['avg_duration_ms']}""")
+        
+        return f"""**📊 工具调用统计：**
+
+**全局统计：**
+- 总调用次数: {global_stats['total_calls']}
+- 成功次数: {global_stats['successful_calls']}
+- 失败次数: {global_stats['failed_calls']}
+- 成功率: {global_stats['success_rate']}
+- 平均耗时: {global_stats['avg_duration_ms']}
+
+**各工具统计：**
+{chr(10).join(tool_list)}"""
+    
+    elif cmd == '/memory list':
+        mm = get_memory_manager()
+        sessions = mm.list_sessions()
+        if sessions:
+            session_list = []
+            for s in sessions[:20]:
+                session_list.append(f"- {s['title']} ({s['created_at']})")
+                session_list.append(f"  消息: {s['message_count']} | 关键记忆: {s['key_memory_count']}")
+            return f"""**📚 会话列表（最近 20 个）：**
+
+{chr(10).join(session_list)}
+
+共 {len(sessions)} 个会话"""
+        else:
+            return "还没有保存的会话"
+    
+    elif cmd.startswith('/memory add'):
+        parts = cmd.split(maxsplit=2)
+        if len(parts) < 3:
+            return "⚠️ 请指定要添加的记忆内容，例如：`/memory add 用户喜欢简洁的回复`"
+        
+        content = parts[2]
+        mm = get_memory_manager()
+        mm.add_key_memory(st.session_state.current_chat_id, content, importance=2)
+        save_current_chat()
+        return f"✅ 关键记忆已添加：{content}"
+    
+    elif cmd == '/memory context':
+        mm = get_memory_manager()
+        context = mm.get_context(st.session_state.current_chat_id)
+        if context:
+            return f"**🔍 当前会话上下文：**\n\n{context}"
+        else:
+            return "当前会话还没有上下文"
+    
+    elif cmd == '/agent list':
+        orch = get_orchestrator()
+        agents = orch.list_agents()
+        agent_list = []
+        for a in agents:
+            role_icon = {
+                "general": "💬",
+                "coder": "💻",
+                "researcher": "🔍",
+                "debugger": "🐛",
+                "planner": "📋"
+            }.get(a["role"], "🤖")
+            agent_list.append(f"{role_icon} **{a['name']}** - {a['description']}")
+            agent_list.append(f"   可转交: {', '.join(a['handoff_targets'])}")
+        return f"**🤖 智能体列表：**\n\n{chr(10).join(agent_list)}"
+    
+    elif cmd.startswith('/agent set'):
+        parts = cmd.split(maxsplit=2)
+        if len(parts) < 3:
+            return "⚠️ 请指定智能体名称，例如：`/agent set Coder`"
+        
+        agent_name = parts[2]
+        orch = get_orchestrator()
+        success = orch.set_current_agent(agent_name)
+        if success:
+            agent = orch.get_current_agent()
+            role_icon = {
+                "general": "💬",
+                "coder": "💻",
+                "researcher": "🔍",
+                "debugger": "🐛",
+                "planner": "📋"
+            }.get(agent.role.value, "🤖")
+            return f"✅ 已切换到智能体：{role_icon} **{agent.name}**\n\n{agent.description}"
+        else:
+            return f"⚠️ 找不到智能体：{agent_name}"
+    
+    elif cmd == '/agent current':
+        orch = get_orchestrator()
+        agent = orch.get_current_agent()
+        if agent:
+            role_icon = {
+                "general": "💬",
+                "coder": "💻",
+                "researcher": "🔍",
+                "debugger": "🐛",
+                "planner": "📋"
+            }.get(agent.role.value, "🤖")
+            return f"**🤖 当前智能体：**\n\n{role_icon} **{agent.name}**\n\n{agent.description}\n\n可转交目标：{', '.join(agent.handoff_targets)}"
+        else:
+            return "还没有设置当前智能体，使用 `/agent set <名称>` 设置"
+    
+    elif cmd.startswith('/agent handoff'):
+        parts = cmd.split(maxsplit=3)
+        if len(parts) < 3:
+            return "⚠️ 请指定目标智能体，例如：`/agent handoff Coder 需要编写代码`"
+        
+        target_agent = parts[2]
+        reason = parts[3] if len(parts) > 3 else ""
+        orch = get_orchestrator()
+        current = orch.get_current_agent()
+        
+        if not current:
+            return "⚠️ 请先设置当前智能体"
+        
+        result = orch.handoff(current.name, target_agent, reason)
+        if result["success"]:
+            new_agent = result["agent"]
+            role_icon = {
+                "general": "💬",
+                "coder": "💻",
+                "researcher": "🔍",
+                "debugger": "🐛",
+                "planner": "📋"
+            }.get(new_agent["role"], "🤖")
+            return f"✅ 任务已转交！\n\n从：{current.name}\n到：{role_icon} **{new_agent['name']}**\n\n原因：{reason or '未指定'}\n\n{new_agent['description']}"
+        else:
+            return f"⚠️ 转交失败：{result.get('error', '未知错误')}"
+    
+    elif cmd == '/improve status':
+        improver = get_self_improver()
+        status = improver.get_status()
+        
+        category_icons = {
+            "performance": "⚡",
+            "security": "🔒",
+            "functionality": "✨",
+            "usability": "🎯",
+            "reliability": "🔧"
+        }
+        
+        category_list = []
+        for cat, stats in status["categories"].items():
+            icon = category_icons.get(cat, "📦")
+            category_list.append(f"{icon} {cat}: {stats['completed']}/{stats['total']} 已完成")
+        
+        return f"""**🔄 自我迭代状态：**
+
+- 总计：{status['total']}
+- 待处理：{status['pending']}
+- 已完成：{status['completed']}
+
+**按分类：**
+{chr(10).join(category_list)}"""
+    
+    elif cmd.startswith('/improve list'):
+        parts = cmd.split(maxsplit=2)
+        status_filter = parts[2] if len(parts) > 2 else None
+        
+        improver = get_self_improver()
+        improvements = improver.list_improvements(status_filter)
+        
+        if not improvements:
+            return "还没有改进记录"
+        
+        category_icons = {
+            "performance": "⚡",
+            "security": "🔒",
+            "functionality": "✨",
+            "usability": "🎯",
+            "reliability": "🔧"
+        }
+        
+        imp_list = []
+        for imp in improvements[:20]:
+            icon = category_icons.get(imp.category.value, "📦")
+            status_icon = "✅" if imp.status == "completed" else "⏳"
+            priority_label = "P0" if imp.priority == 0 else "P1" if imp.priority == 1 else "P2"
+            imp_list.append(f"{status_icon} {priority_label} {icon} **{imp.id}**: {imp.description}")
+        
+        return f"""**📋 改进列表（最近 20 个）：**
+
+{chr(10).join(imp_list)}"""
+    
+    elif cmd.startswith('/improve add'):
+        parts = cmd.split(maxsplit=4)
+        if len(parts) < 4:
+            return "⚠️ 请指定分类和描述，例如：`/improve add functionality 添加搜索功能 0`"
+        
+        category_str = parts[2]
+        description = parts[3]
+        priority = int(parts[4]) if len(parts) > 4 else 2
+        
+        try:
+            category = ImprovementCategory(category_str)
+        except ValueError:
+            valid_categories = [c.value for c in ImprovementCategory]
+            return f"⚠️ 无效的分类！有效分类：{', '.join(valid_categories)}"
+        
+        improver = get_self_improver()
+        imp_id = improver.add_improvement(category, description, priority)
+        
+        category_icons = {
+            "performance": "⚡",
+            "security": "🔒",
+            "functionality": "✨",
+            "usability": "🎯",
+            "reliability": "🔧"
+        }
+        icon = category_icons.get(category.value, "📦")
+        
+        return f"✅ 改进已添加！\n\nID: {imp_id}\n分类: {icon} {category.value}\n描述: {description}\n优先级: P{priority}"
+    
+    elif cmd == '/improve next':
+        improver = get_self_improver()
+        next_imp = improver.get_next_improvement()
+        
+        if not next_imp:
+            return "没有待处理的改进！"
+        
+        category_icons = {
+            "performance": "⚡",
+            "security": "🔒",
+            "functionality": "✨",
+            "usability": "🎯",
+            "reliability": "🔧"
+        }
+        icon = category_icons.get(next_imp.category.value, "📦")
+        priority_label = "P0" if next_imp.priority == 0 else "P1" if next_imp.priority == 1 else "P2"
+        
+        return f"""**🎯 下一个待处理改进：**
+
+ID: {next_imp.id}
+分类: {icon} {next_imp.category.value}
+优先级: {priority_label}
+描述: {next_imp.description}
+创建时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(next_imp.created_at))}"""
+    
+    elif cmd.startswith('/improve complete'):
+        parts = cmd.split(maxsplit=3)
+        if len(parts) < 4:
+            return "⚠️ 请指定改进 ID 和结果，例如：`/improve complete abc123 已成功添加搜索功能`"
+        
+        imp_id = parts[2]
+        result = parts[3]
+        
+        improver = get_self_improver()
+        success = improver.complete_improvement(imp_id, result)
+        
+        if success:
+            return f"✅ 改进已完成！\n\nID: {imp_id}\n结果: {result}"
+        else:
+            return f"⚠️ 找不到改进：{imp_id}"
+    
+    elif cmd.startswith('/web search'):
+        parts = cmd.split(maxsplit=3)
+        if len(parts) < 3:
+            return "⚠️ 请指定搜索查询，例如：`/web search Python 教程 5`"
+        
+        query = parts[2]
+        num_results = 5
+        if len(parts) > 3 and parts[3].isdigit():
+            num_results = int(parts[3])
+        
+        result = web_search(query, num_results)
+        if not result["success"]:
+            return f"⚠️ 搜索失败：{result.get('error', '未知错误')}"
+        
+        result_parts = [f"**🔍 搜索结果（{result['count']} 条）：**\n"]
+        for i, item in enumerate(result["results"][:num_results]):
+            result_parts.append(f"{i+1}. **{item.get('title', '无标题')}**")
+            result_parts.append(f"   {item.get('href', '')}")
+            result_parts.append(f"   {item.get('body', '')[:200]}...\n")
+        
+        return "\n".join(result_parts)
+    
+    elif cmd.startswith('/web fetch'):
+        parts = cmd.split(maxsplit=2)
+        if len(parts) < 3:
+            return "⚠️ 请指定 URL，例如：`/web fetch https://example.com`"
+        
+        url = parts[2]
+        result = web_fetch(url)
+        if not result["success"]:
+            return f"⚠️ 抓取失败：{result.get('error', '未知错误')}"
+        
+        return f"**📄 网页内容：**\n\n{result['content']}"
+    
+    elif cmd.startswith('/file read'):
+        parts = cmd.split(maxsplit=2)
+        if len(parts) < 3:
+            return "⚠️ 请指定文件路径，例如：`/file read /path/to/file.pdf`"
+        
+        file_path = parts[2]
+        result = extract_file_text(file_path)
+        if not result["success"]:
+            return f"⚠️ 读取失败：{result.get('error', '未知错误')}"
+        
+        preview = result["text"][:3000]
+        if len(result["text"]) > 3000:
+            preview += "\n\n[...内容已截断...]"
+        
+        return f"**📄 文件内容：**\n\n{preview}"
+    
+    elif cmd.startswith('/api get'):
+        parts = cmd.split(maxsplit=3)
+        if len(parts) < 3:
+            return "⚠️ 请指定 URL，例如：`/api get https://api.example.com/data`"
+        
+        url = parts[2]
+        data_str = parts[3] if len(parts) > 3 else None
+        data = json.loads(data_str) if data_str else None
+        
+        result = api_request(url, method="GET", data=data)
+        if not result["success"]:
+            return f"⚠️ API 请求失败：{result.get('error', '未知错误')}"
+        
+        result_str = json.dumps(result["result"], ensure_ascii=False, indent=2)
+        return f"**🔌 API 响应（状态码 {result['status_code']}）：**\n\n```json\n{result_str}\n```"
+    
+    elif cmd.startswith('/api post'):
+        parts = cmd.split(maxsplit=3)
+        if len(parts) < 4:
+            return "⚠️ 请指定 URL 和 JSON 数据，例如：`/api post https://api.example.com/data {\"key\":\"value\"}`"
+        
+        url = parts[2]
+        data_str = parts[3]
+        
+        try:
+            data = json.loads(data_str)
+        except:
+            data = data_str
+        
+        result = api_request(url, method="POST", data=data)
+        if not result["success"]:
+            return f"⚠️ API 请求失败：{result.get('error', '未知错误')}"
+        
+        result_str = json.dumps(result["result"], ensure_ascii=False, indent=2) if isinstance(result["result"], (dict, list)) else str(result["result"])
+        return f"**🔌 API 响应（状态码 {result['status_code']}）：**\n\n```json\n{result_str}\n```"
     
     elif cmd == '/security status':
         status = get_security_status()

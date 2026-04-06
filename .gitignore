@@ -94,6 +94,16 @@ backup_*/
 
 # 测试文件
 test_*.py
+test_industrial_panel.py
+test_enhanced.py
+
+# AI 会话和改进
+.ai_sessions/
+.ai_improvements.json
+.ai_mode_config.json
+
+# Streamlit
+.streamlit/secrets.toml
 
 # 外部项目
 OpenHarness/
