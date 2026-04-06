@@ -4,7 +4,7 @@
 from .logger import logger
 from .llm_adapter import get_llm_adapter
 from .memory_palace import SimpleMemoryPalace, get_memory_palace
-from .query_engine import AsyncQueryEngine, get_query_engine
+from .query_engine import AsyncQueryEngine, get_engine
 
 __all__ = [
     "logger",
@@ -12,5 +12,5 @@ __all__ = [
     "SimpleMemoryPalace",
     "get_memory_palace",
     "AsyncQueryEngine",
-    "get_query_engine",
+    "get_engine",
 ]

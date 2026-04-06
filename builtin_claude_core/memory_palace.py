@@ -154,3 +154,8 @@ class SQLiteMemoryPalace:
         except Exception as e:
             logger.error(f"获取章节历史失败：{e}")
             return []
+
+SimpleMemoryPalace = SQLiteMemoryPalace
+
+def get_memory_palace(novel_name="默认小说"):
+    return SimpleMemoryPalace(novel_name)
