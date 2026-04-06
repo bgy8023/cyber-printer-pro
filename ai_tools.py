@@ -476,21 +476,19 @@ def get_tool_statistics() -> Dict[str, Any]:
     stats = {
         "global": {
             "total_calls": _global_stats.total_calls,
-            "successful_calls": _global_stats.successful_calls,
-            "failed_calls": _global_stats.failed_calls,
-            "success_rate": f"{_global_stats.success_rate:.1%}",
-            "avg_duration_ms": f"{_global_stats.avg_duration * 1000:.1f}ms"
+            "success_rate": _global_stats.success_rate,
+            "avg_time_ms": _global_stats.avg_duration * 1000
         },
-        "by_tool": {}
+        "tools": {}
     }
     
     for tool_name, tool_stat in _tool_stats.items():
-        stats["by_tool"][tool_name] = {
-            "total_calls": tool_stat.total_calls,
-            "successful_calls": tool_stat.successful_calls,
-            "failed_calls": tool_stat.failed_calls,
-            "success_rate": f"{tool_stat.success_rate:.1%}",
-            "avg_duration_ms": f"{tool_stat.avg_duration * 1000:.1f}ms"
+        stats["tools"][tool_name] = {
+            "call_count": tool_stat.total_calls,
+            "success_count": tool_stat.successful_calls,
+            "failure_count": tool_stat.failed_calls,
+            "success_rate": tool_stat.success_rate,
+            "avg_time_ms": tool_stat.avg_duration * 1000
         }
     
     return stats
