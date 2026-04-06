@@ -124,3 +124,7 @@ test_cyber_harness.py
 test_novel_tools.py
 test_simple.py
 test_skill_loader.py
+
+# Novel settings
+panel_settings.json
+novel_settings/

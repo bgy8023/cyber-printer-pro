@@ -11,15 +11,16 @@ import os
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ai_assistant import (
-    init_session_state,
-    save_current_chat,
-    get_memory_manager,
-    handle_command
-)
-from agent_orchestrator import get_orchestrator
-from self_improver import get_self_improver
-from ai_tools import get_tool_statistics
+# 已删除的模块（暂时禁用）
+# from ai_assistant import (
+#     init_session_state,
+#     save_current_chat,
+#     get_memory_manager,
+#     handle_command
+# )
+# from agent_orchestrator import get_orchestrator
+# from self_improver import get_self_improver
+# from ai_tools import get_tool_statistics
 
 
 def init_industrial_session():
@@ -959,29 +960,10 @@ def render_skills_workspace():
 
 
 def render_agents_workspace():
-    """渲染智能体配置工作区"""
+    """渲染智能体配置工作区（暂时禁用）"""
     st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
     st.markdown("### 👥 智能体配置")
-    
-    orch = get_orchestrator()
-    agents = orch.list_agents()
-    
-    for agent in agents:
-        role_icons = {
-            "general": "💬",
-            "coder": "💻",
-            "researcher": "🔍",
-            "debugger": "🐛",
-            "planner": "📋"
-        }
-        icon = role_icons.get(agent["role"], "🤖")
-        
-        with st.expander(f"{icon} {agent['name']}", expanded=False):
-            st.write(f"**角色**: {agent['role']}")
-            st.write(f"**描述**: {agent['description']}")
-            st.write(f"**工具**: {', '.join(agent['tools']) if agent['tools'] else '无'}")
-            st.write(f"**可转交**: {', '.join(agent['handoff_targets'])}")
-    
+    st.info("智能体功能暂时禁用，正在优化中...")
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -990,50 +972,7 @@ def render_tools_workspace():
     st.markdown('<div class="industrial-card">', unsafe_allow_html=True)
     st.markdown("### 🛠️ 工具配置")
     
-    stats = get_tool_statistics()
-    
-    st.markdown("#### 📊 全局统计")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{stats['global']['total_calls']}</div>
-            <div class="metric-label">总调用次数</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        success_rate = stats['global']['success_rate'] * 100 if stats['global']['total_calls'] > 0 else 0
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{success_rate:.1f}%</div>
-            <div class="metric-label">成功率</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        avg_time = stats['global']['avg_time_ms']
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{avg_time:.0f}ms</div>
-            <div class="metric-label">平均耗时</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    st.markdown("#### 🔧 各工具统计")
-    
-    for tool_name, tool_stats in stats['tools'].items():
-        with st.expander(f"🔧 {tool_name}", expanded=False):
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("调用次数", tool_stats['call_count'])
-            col2.metric("成功", tool_stats['success_count'])
-            col3.metric("失败", tool_stats['failure_count'])
-            col4.metric("成功率", f"{tool_stats['success_rate']*100:.1f}%")
-            
-            st.write(f"**平均耗时**: {tool_stats['avg_time_ms']:.2f}ms")
+    st.info("💡 工具统计功能已暂时禁用（模块已精简）")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1106,7 +1045,7 @@ def render_settings_workspace():
 def main():
     """主函数"""
     init_industrial_session()
-    init_session_state()
+    # init_session_state()  # 已删除的模块
     
     st.set_page_config(
         page_title="🚀 OpenMars - 工业级 AI 助手",
