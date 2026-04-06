@@ -1,4 +1,4 @@
-# 🚀 赛博印钞机 Pro V3.0 工业级终极封板
+# 🚀 OpenMars Pro V3.0 工业级终极封板
 
 基于 Streamlit + LiteLLM 的工业级小说创作 AI 助手，集成 P0级Token黑洞防护、工业级异步引擎、SQLite记忆宫殿、全链路告警。
 
@@ -30,8 +30,8 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/bgy8023/cyber-printer-pro.git
-cd cyber-printer-pro
+git clone https://github.com/bgy8023/OpenMars.git
+cd OpenMars
 
 # 2. 配置环境变量
 cp .env.example .env
@@ -61,7 +61,7 @@ docker-compose logs -f
 ## 📂 项目结构
 
 ```
-cyber-printer-pro/
+OpenMars/
 ├── builtin_claude_core/    # 核心模块
 │   ├── query_engine.py      # 工业级异步引擎（nest_asyncio）
 │   ├── memory_palace.py     # SQLite 记忆宫殿（自动迁移旧数据）
@@ -174,4 +174,4 @@ MIT License，仅供学习研究使用。
 
 ---
 
-**赛博印钞机 Pro V3.0 祝您创作愉快！** 🎉
+**OpenMars Pro V3.0 祝您创作愉快！** 🎉

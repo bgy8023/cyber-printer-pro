@@ -1,8 +1,8 @@
 version: '3.8'
 services:
-  cyber-printer:
+  openmars:
     build: .
-    container_name: cyber_printer_pro
+    container_name: openmars_pro
     restart: always
     ports:
       - "8501:8501"

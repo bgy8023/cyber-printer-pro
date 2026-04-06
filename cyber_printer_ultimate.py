@@ -12,7 +12,7 @@ def send_mobile_alert(title, content, is_error=False):
     try:
         icon = "🚨" if is_error else "🎉"
         full_title = f"{icon}{title}"
-        full_content = f"【赛博印钞机Pro】{content}"
+        full_content = f"【OpenMarsPro】{content}"
         
         if "bark" in webhook_url.lower():
             requests.get(f"{webhook_url}/{full_title}/{full_content}", timeout=5)
