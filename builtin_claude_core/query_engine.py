@@ -1,9 +1,11 @@
 import os
 import time
+import nest_asyncio
 from dotenv import load_dotenv
 from .logger import logger
 
 load_dotenv()
+nest_asyncio.apply()
 
 class SyncQueryEngine:
     def __init__(self):

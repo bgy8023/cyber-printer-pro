@@ -75,7 +75,8 @@ class SQLiteMemoryPalace:
         for key, fname in [
             ("outline", "00-全本大纲.md"),
             ("character", "01-人物档案.md"),
-            ("worldview", "02-世界观设定.md")
+            ("worldview", "02-世界观设定.md"),
+            ("tomato_audit", "03-番茄审核铁则.md")
         ]:
             fpath = os.path.join(self.base_dir, fname)
             if os.path.exists(fpath):
