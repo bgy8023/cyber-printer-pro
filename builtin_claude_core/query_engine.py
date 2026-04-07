@@ -4,7 +4,6 @@ import asyncio
 import nest_asyncio
 nest_asyncio.apply()
 
-import streamlit as st
 from dotenv import load_dotenv
 from litellm import acompletion, RateLimitError
 from .logger import logger
@@ -75,6 +74,5 @@ class AsyncQueryEngine:
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(self.parallel_coordinate_async(chapter_num, target_words, fixed_memory, dynamic_memory, custom_prompt))
 
-@st.cache_resource
 def get_engine():
     return AsyncQueryEngine()
