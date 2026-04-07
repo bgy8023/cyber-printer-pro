@@ -41,7 +41,7 @@ cp .env.example .env
 pip install -r requirements.txt --upgrade
 
 # 4. 启动 Web 面板
-streamlit run web_panel_industrial.py --server.port 8501
+streamlit run openmars_panel.py --server.port 8501
 ```
 
 访问 http://localhost:8501 即可使用。
@@ -73,7 +73,7 @@ OpenMars/
 │   └── 默认小说/             # 默认小说模板
 ├── output/                   # 输出目录（自动创建）
 │   └── 第N章_时间戳.md       # 生成的章节
-├── web_panel_industrial.py   # V3.0 终极面板
+├── openmars_panel.py          # V3.0 终极面板
 ├── cyber_printer_ultimate.py # 主控调度 + 全链路告警
 ├── Dockerfile                # Docker 镜像
 ├── docker-compose.yml        # Docker Compose 配置
@@ -118,7 +118,7 @@ OpenMars/
 - **query_engine.py**：工业级异步引擎 + nest_asyncio 补丁，彻底解决容器冲突
 - **memory_palace.py**：SQLite 记忆宫殿，僵尸锁清理、JSON 数据自动迁移
 - **cyber_printer_ultimate.py**：主控调度 + 全链路告警推送
-- **web_panel_industrial.py**：V3.0 终极面板 + P0级状态机
+- **openmars_panel.py**：V3.0 终极面板 + P0级状态机
 
 ### 安全保障
 - **P0级状态机**：生成按钮状态绑定，生成中自动锁定
@@ -171,6 +171,57 @@ MIT License，仅供学习研究使用。
 - Streamlit（⭐38.7k Stars）
 - LiteLLM 统一接口
 - OpenClaw 自主 AI Agent 理念
+
+---
+
+## ✅ 核心功能验证清单
+
+为确保 OpenMars V3.0 所有工业级特性正常工作，请按以下步骤验证：
+
+### 1️⃣ 面板标题验证
+- **步骤**：打开浏览器访问 http://localhost:8501
+- **验证**：页面标题显示「OpenMars 工业级网文创作系统」，不是旧名字
+
+### 2️⃣ P0级Token黑洞防护验证（核心功能）
+- **步骤**：
+  1. 配置好大模型 API
+  2. 点击「🚀 一键躺平生成」
+  3. 生成过程中刷新页面
+- **验证**：
+  - ✅ 按钮保持「⏳ 正在疯狂码字中... 请勿刷新！」的锁定状态
+  - ✅ 进度条继续走，任务没有中断
+  - ✅ 生成完成后，能正常看到结果
+
+### 3️⃣ SQLite 记忆宫殿验证
+- **步骤**：
+  1. 生成完成后，切换到「📚 记忆宫殿」Tab
+  2. 检查文件系统
+- **验证**：
+  - ✅ 能看到新生成的章节摘要
+  - ✅ `novel_settings/默认小说/` 目录下有 `memory.db` 文件
+  - ✅ 不是之前的 JSON 垃圾文件
+
+### 4️⃣ 旧 JSON 数据迁移验证
+- **步骤**：如果你之前有旧的 JSON 章节记忆
+- **验证**：
+  - ✅ 它们自动迁移到 SQLite 里了
+  - ✅ 没有丢失任何历史章节
+
+### 5️⃣ 启动脚本验证
+- **步骤**：
+  1. 按 Ctrl+C 停止当前前台运行的面板
+  2. 执行 `./run_openmars.sh`
+- **验证**：
+  - ✅ 能正常一键启动
+
+### 6️⃣ 局域网访问验证
+- **步骤**：用同网络下的手机/其他电脑访问
+- **验证**：
+  - ✅ 能正常打开面板（http://192.168.x.x:8501）
+
+---
+
+**所有验证项都通过后，OpenMars V3.0 工业级系统才算真的落地！** 🎉
 
 ---
 
