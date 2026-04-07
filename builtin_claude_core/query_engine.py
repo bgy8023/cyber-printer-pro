@@ -1,5 +1,6 @@
 import os
 import asyncio
+import time
 # 【P0级修复 必须放在最顶部】工业级事件循环嵌套补丁，解决Streamlit容器冲突
 import nest_asyncio
 nest_asyncio.apply()
@@ -17,16 +18,16 @@ class AsyncQueryEngine:
         self.model_name = os.getenv("LLM_MODEL_NAME", "deepseek-chat")
         self.max_retries = int(os.getenv("MAX_RETRY", "3"))
 
-    async def call_llm_async(self, user_prompt: str, system_prompt: str) -> str:
-        # 每次调用创建新的客户端，避免异步上下文冲突
-        client = openai.AsyncOpenAI(
+    def call_llm_sync(self, user_prompt: str, system_prompt: str = "你是专业助手") -> str:
+        # 使用同步客户端，彻底避免异步上下文问题
+        client = openai.OpenAI(
             api_key=self.api_key,
             base_url=self.base_url
         )
         
         for i in range(self.max_retries):
             try:
-                response = await client.chat.completions.create(
+                response = client.chat.completions.create(
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -39,39 +40,36 @@ class AsyncQueryEngine:
             except openai.RateLimitError:
                 wait_time = 2 ** i
                 logger.warning(f"⚠️  触发限流，等待{wait_time}秒后重试")
-                await asyncio.sleep(wait_time)
+                time.sleep(wait_time)
             except Exception as e:
                 if i == self.max_retries - 1:
                     logger.error(f"❌ LLM调用最终失败: {e}")
                     raise e
                 wait_time = 1 * (i+1)
                 logger.warning(f"⚠️  调用失败，等待{wait_time}秒后重试，错误: {e}")
-                await asyncio.sleep(wait_time)
+                time.sleep(wait_time)
 
-    async def parallel_coordinate_async(self, chapter_num: int, target_words: int, fixed_memory: str, dynamic_memory: str, custom_prompt: str):
+    def parallel_coordinate(self, chapter_num: int, target_words: int, fixed_memory: str, dynamic_memory: str, custom_prompt: str):
         logger.info(f"⚡ 启动多智能体并行网络 | XML边界模式 | 章节: {chapter_num}")
         
         outline_prompt = f"<context>\n<static_worldview>\n{fixed_memory}\n</static_worldview>\n<recent_events>\n{dynamic_memory}\n</recent_events>\n</context>\n<user_request>\n{custom_prompt}\n</user_request>\n请基于<context>，为第{chapter_num}章生成剧情大纲。"
         review_prompt = f"<context>\n<static_worldview>\n{fixed_memory}\n</static_worldview>\n<recent_events>\n{dynamic_memory}\n</recent_events>\n</context>\n请分析<context>，列出第{chapter_num}章绝不能踩的人设崩塌、剧情矛盾毒点预警。"
 
-        # 并行执行大纲和审查生成
-        tasks = [
-            self.call_llm_async(outline_prompt, "你是网文界白金大纲师，擅长设计节奏紧凑、爽点密集的章节结构。"),
-            self.call_llm_async(review_prompt, "你是网文界金牌主编，专门排查人设崩塌、前后矛盾、逻辑漏洞的问题。")
-        ]
-        outline, review = await asyncio.gather(*tasks)
+        # 同步执行（虽然慢一点，但 100% 稳定）
+        outline = self.call_llm_sync(outline_prompt, "你是网文界白金大纲师，擅长设计节奏紧凑、爽点密集的章节结构。")
+        review = self.call_llm_sync(review_prompt, "你是网文界金牌主编，专门排查人设崩塌、前后矛盾、逻辑漏洞的问题。")
         
         final_prompt = f"<world_rules>\n{fixed_memory}\n</world_rules>\n<previous_chapters>\n{dynamic_memory}\n</previous_chapters>\n<chapter_outline>\n{outline}\n</chapter_outline>\n<strict_warnings>\n{review}\n</strict_warnings>\n请严格按照<chapter_outline>撰写正文，绝对避开<strict_warnings>中的毒点。字数逼近{target_words}字。只输出正文，不要标题、注释等额外内容。"
         
-        final_content = await self.call_llm_async(final_prompt, "你是网文白金主笔，擅长写节奏紧凑、爽点密集、人物立体的爆款网文，严格遵守XML边界创作。")
+        final_content = self.call_llm_sync(final_prompt, "你是网文白金主笔，擅长写节奏紧凑、爽点密集、人物立体的爆款网文，严格遵守XML边界创作。")
         return {"outline": outline, "review": review, "content": final_content, "real_chars": len(final_content)}
 
-    # 【修复点3】在Streamlit环境中，asyncio.run()是最稳定的方式
-    def call_llm_sync(self, user_prompt: str, system_prompt: str = "你是专业助手") -> str:
-        return asyncio.run(self.call_llm_async(user_prompt, system_prompt))
+    # 保留异步方法，但内部调用同步方法
+    async def call_llm_async(self, user_prompt: str, system_prompt: str) -> str:
+        return self.call_llm_sync(user_prompt, system_prompt)
 
-    def parallel_coordinate(self, chapter_num: int, target_words: int, fixed_memory: str, dynamic_memory: str, custom_prompt: str):
-        return asyncio.run(self.parallel_coordinate_async(chapter_num, target_words, fixed_memory, dynamic_memory, custom_prompt))
+    async def parallel_coordinate_async(self, chapter_num: int, target_words: int, fixed_memory: str, dynamic_memory: str, custom_prompt: str):
+        return self.parallel_coordinate(chapter_num, target_words, fixed_memory, dynamic_memory, custom_prompt)
 
 def get_engine():
     return AsyncQueryEngine()
