@@ -65,14 +65,12 @@ class AsyncQueryEngine:
         final_content = await self.call_llm_async(final_prompt, "你是网文白金主笔，擅长写节奏紧凑、爽点密集、人物立体的爆款网文，严格遵守XML边界创作。")
         return {"outline": outline, "review": review, "content": final_content, "real_chars": len(final_content)}
 
-    # 【修复点3】正确的同步-异步桥接，绝对不能用asyncio.run()
+    # 【修复点3】在Streamlit环境中，asyncio.run()是最稳定的方式
     def call_llm_sync(self, user_prompt: str, system_prompt: str = "你是专业助手") -> str:
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.call_llm_async(user_prompt, system_prompt))
+        return asyncio.run(self.call_llm_async(user_prompt, system_prompt))
 
     def parallel_coordinate(self, chapter_num: int, target_words: int, fixed_memory: str, dynamic_memory: str, custom_prompt: str):
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(self.parallel_coordinate_async(chapter_num, target_words, fixed_memory, dynamic_memory, custom_prompt))
+        return asyncio.run(self.parallel_coordinate_async(chapter_num, target_words, fixed_memory, dynamic_memory, custom_prompt))
 
 def get_engine():
     return AsyncQueryEngine()
