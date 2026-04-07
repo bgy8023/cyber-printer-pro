@@ -16,16 +16,17 @@ class AsyncQueryEngine:
         self.base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
         self.model_name = os.getenv("LLM_MODEL_NAME", "deepseek-chat")
         self.max_retries = int(os.getenv("MAX_RETRY", "3"))
-        # 【终极修复】使用 openai SDK 替代 litellm，彻底根除 Timeout 冲突
-        self.client = openai.AsyncOpenAI(
+
+    async def call_llm_async(self, user_prompt: str, system_prompt: str) -> str:
+        # 每次调用创建新的客户端，避免异步上下文冲突
+        client = openai.AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.base_url
         )
-
-    async def call_llm_async(self, user_prompt: str, system_prompt: str) -> str:
+        
         for i in range(self.max_retries):
             try:
-                response = await self.client.chat.completions.create(
+                response = await client.chat.completions.create(
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": system_prompt},
