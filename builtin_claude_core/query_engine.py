@@ -1,17 +1,11 @@
 import os
-import asyncio
 import time
-# 【P0级修复 必须放在最顶部】工业级事件循环嵌套补丁，解决Streamlit容器冲突
-import nest_asyncio
-nest_asyncio.apply()
-
-import openai
 from dotenv import load_dotenv
 from .logger import logger
 
 load_dotenv()
 
-class AsyncQueryEngine:
+class SyncQueryEngine:
     def __init__(self):
         self.api_key = os.getenv("LLM_API_KEY")
         self.base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
@@ -20,6 +14,7 @@ class AsyncQueryEngine:
 
     def call_llm_sync(self, user_prompt: str, system_prompt: str = "你是专业助手") -> str:
         # 使用同步客户端，彻底避免异步上下文问题
+        import openai
         client = openai.OpenAI(
             api_key=self.api_key,
             base_url=self.base_url
@@ -72,4 +67,4 @@ class AsyncQueryEngine:
         return self.parallel_coordinate(chapter_num, target_words, fixed_memory, dynamic_memory, custom_prompt)
 
 def get_engine():
-    return AsyncQueryEngine()
+    return SyncQueryEngine()
