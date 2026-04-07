@@ -4,8 +4,8 @@ import asyncio
 import nest_asyncio
 nest_asyncio.apply()
 
+import openai
 from dotenv import load_dotenv
-from litellm import acompletion, RateLimitError
 from .logger import logger
 
 load_dotenv()
@@ -16,26 +16,26 @@ class AsyncQueryEngine:
         self.base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
         self.model_name = os.getenv("LLM_MODEL_NAME", "deepseek-chat")
         self.max_retries = int(os.getenv("MAX_RETRY", "3"))
-        # 【修复点1】正确的超时配置，适配DeepSeek异步SDK
-        self.request_timeout = float(os.getenv("LLM_TIMEOUT", "120.0"))
+        # 【终极修复】使用 openai SDK 替代 litellm，彻底根除 Timeout 冲突
+        self.client = openai.AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
 
     async def call_llm_async(self, user_prompt: str, system_prompt: str) -> str:
         for i in range(self.max_retries):
             try:
-                # 【修复点2】异步调用用request_timeout，不是timeout，适配DeepSeek规范
-                response = await acompletion(
+                response = await self.client.chat.completions.create(
                     model=self.model_name,
-                    messages=[{"role": "system", "content": system_prompt},
-                              {"role": "user", "content": user_prompt}],
-                    api_key=self.api_key,
-                    base_url=self.base_url,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
                     temperature=0.7,
-                    top_p=0.9,
-                    request_timeout=self.request_timeout,
-                    max_retries=0
+                    top_p=0.9
                 )
                 return response.choices[0].message.content.strip()
-            except RateLimitError:
+            except openai.RateLimitError:
                 wait_time = 2 ** i
                 logger.warning(f"⚠️  触发限流，等待{wait_time}秒后重试")
                 await asyncio.sleep(wait_time)
