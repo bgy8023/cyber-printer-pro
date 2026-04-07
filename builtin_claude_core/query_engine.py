@@ -47,14 +47,21 @@ class SyncQueryEngine:
                 time.sleep(wait_time)
 
     def parallel_coordinate(self, chapter_num: int, target_words: int, fixed_memory: str, dynamic_memory: str, custom_prompt: str):
-        logger.info(f"⚡ 启动多智能体并行网络 | XML边界模式 | 章节: {chapter_num}")
+        logger.info(f"⚡ 启动单章生成模式 | XML边界模式 | 章节: {chapter_num}")
         
         outline_prompt = f"<context>\n<static_worldview>\n{fixed_memory}\n</static_worldview>\n<recent_events>\n{dynamic_memory}\n</recent_events>\n</context>\n<user_request>\n{custom_prompt}\n</user_request>\n请基于<context>，为第{chapter_num}章生成剧情大纲。"
         review_prompt = f"<context>\n<static_worldview>\n{fixed_memory}\n</static_worldview>\n<recent_events>\n{dynamic_memory}\n</recent_events>\n</context>\n请分析<context>，列出第{chapter_num}章绝不能踩的人设崩塌、剧情矛盾毒点预警。"
 
-        # 同步执行（虽然慢一点，但 100% 稳定）
+        # 同步执行，稳扎稳打跑单章生成，避免并发
         outline = self.call_llm_sync(outline_prompt, "你是网文界白金大纲师，擅长设计节奏紧凑、爽点密集的章节结构。")
+        
+        # 添加短暂延迟，避免触发模型并发限制
+        time.sleep(1)
+        
         review = self.call_llm_sync(review_prompt, "你是网文界金牌主编，专门排查人设崩塌、前后矛盾、逻辑漏洞的问题。")
+        
+        # 添加短暂延迟，避免触发模型并发限制
+        time.sleep(1)
         
         final_prompt = f"<world_rules>\n{fixed_memory}\n</world_rules>\n<previous_chapters>\n{dynamic_memory}\n</previous_chapters>\n<chapter_outline>\n{outline}\n</chapter_outline>\n<strict_warnings>\n{review}\n</strict_warnings>\n请严格按照<chapter_outline>撰写正文，绝对避开<strict_warnings>中的毒点。字数逼近{target_words}字。只输出正文，不要标题、注释等额外内容。"
         

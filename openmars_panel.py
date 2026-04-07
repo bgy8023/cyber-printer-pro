@@ -34,6 +34,26 @@ if "generate_result" not in st.session_state:
     st.session_state.generate_result = Queue(maxsize=1)
 if "is_generating" not in st.session_state:
     st.session_state.is_generating = False
+if "generate_thread" not in st.session_state:
+    st.session_state.generate_thread = None
+if "thread_start_time" not in st.session_state:
+    st.session_state.thread_start_time = 0
+if "thread_kill_event" not in st.session_state:
+    st.session_state.thread_kill_event = threading.Event()
+
+# 线程超时强制清理（防僵尸进程内存泄漏）
+def check_thread_timeout():
+    if st.session_state.is_generating and st.session_state.thread_start_time:
+        elapsed = time.time() - st.session_state.thread_start_time
+        if elapsed > 2 * 60 * 60:  # 2小时超时
+            st.error("⚠️  生成任务超时，正在强制清理线程...")
+            if st.session_state.generate_thread and st.session_state.generate_thread.is_alive():
+                st.session_state.thread_kill_event.set()
+                # 等待线程结束（最多等待30秒）
+                st.session_state.generate_thread.join(timeout=30)
+            st.session_state.is_generating = False
+            st.session_state.generate_lock.release()
+            st.rerun()
 
 # 生成任务放到独立后台守护线程，彻底和Streamlit主线程隔离
 def background_generate_task(params):
@@ -43,6 +63,11 @@ def background_generate_task(params):
         from builtin_claude_core.logger import logger
         
         logger.info(f"后台任务开始 | 小说：{novel_name} | 章节：{chapter_num}")
+        
+        # 检查是否被强制终止
+        if st.session_state.thread_kill_event.is_set():
+            logger.warning("任务被强制终止")
+            return
         
         # 直接调用你原来的cyber_printer_ultimate.py生成逻辑，一行不改
         success, result_content = generate_chapter_full(
@@ -206,6 +231,8 @@ if generate_btn and ENGINE_READY and not st.session_state.is_generating:
         st.session_state.current_output = ""
         st.session_state.generation_result = {}
         st.session_state.generation_start_time = time.time()
+        st.session_state.thread_start_time = time.time()
+        st.session_state.thread_kill_event.clear()
         st.session_state.generate_lock.acquire()
         # 启动后台线程，daemon=True确保主线程退出时自动清理
         your_generate_params = (chapter_num, target_words, custom_prompt, selected_novel)
@@ -214,6 +241,7 @@ if generate_btn and ENGINE_READY and not st.session_state.is_generating:
             args=(your_generate_params,),
             daemon=True
         )
+        st.session_state.generate_thread = generate_thread
         generate_thread.start()
         st.warning("⏳ 正在疯狂码字中... 请勿刷新页面！")
         st.rerun()
@@ -222,6 +250,8 @@ if generate_btn and ENGINE_READY and not st.session_state.is_generating:
 # 隔离执行区 - 后台任务监控
 # =============================================
 if st.session_state.is_generating and ENGINE_READY:
+    # 检查线程超时
+    check_thread_timeout()
     st.info("🚀 OpenMars已进入并行火力全开模式，请勿刷新页面或点击侧边栏！")
     progress_bar = st.progress(0)
     status_text = st.empty()
