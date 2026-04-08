@@ -61,13 +61,10 @@ def background_generate_task(params):
         chapter_num, target_words, custom_prompt, novel_name = params
         from cyber_printer_ultimate import generate_chapter_full
         from builtin_claude_core.logger import logger
+        import json
+        import os
         
         logger.info(f"后台任务开始 | 小说：{novel_name} | 章节：{chapter_num}")
-        
-        # 检查是否被强制终止
-        if st.session_state.thread_kill_event.is_set():
-            logger.warning("任务被强制终止")
-            return
         
         # 直接调用你原来的cyber_printer_ultimate.py生成逻辑，一行不改
         success, result_content = generate_chapter_full(
@@ -84,23 +81,36 @@ def background_generate_task(params):
             "target_words": target_words,
             "novel_name": novel_name
         }
-        st.session_state.generate_result.put(result)
+        
+        # 保存结果到临时文件，避免使用session_state
+        os.makedirs("temp", exist_ok=True)
+        temp_file = f"temp/generate_result_{chapter_num}_{int(time.time())}.json"
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        
+        # 保存到output目录
+        output_dir = f"output/{novel_name}"
+        os.makedirs(output_dir, exist_ok=True)
+        file_name = f"第{chapter_num}章_{int(time.time())}.md"
+        file_path = os.path.join(output_dir, file_name)
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(result_content)
+        
         logger.info(f"后台任务完成 | 小说：{novel_name} | 章节：{chapter_num} | 成功：{success}")
+        logger.info(f"📁 章节保存到：{file_path}")
+        logger.info(f"📁 结果保存到临时文件：{temp_file}")
+        
     except Exception as e:
         error_msg = f"生成失败: {str(e)}"
-        error_result = {
-            "success": False,
-            "content": error_msg,
-            "chapter_num": chapter_num,
-            "target_words": target_words,
-            "novel_name": novel_name
-        }
-        st.session_state.generate_result.put(error_result)
         logger.error(f"后台任务崩溃：{e}", exc_info=True)
     finally:
-        st.session_state.generate_lock.release()
-        st.session_state.is_generating = False
-        logger.info("后台任务结束，状态重置")
+        # 确保generate_lock存在且被锁定
+        if hasattr(st.session_state, 'generate_lock') and st.session_state.generate_lock.locked():
+            st.session_state.generate_lock.release()
+        # 重置is_generating状态
+        if hasattr(st.session_state, 'is_generating'):
+            st.session_state.is_generating = False
+        logger.info("后台任务结束，锁已释放，状态已重置")
 
 load_dotenv()
 
@@ -261,8 +271,8 @@ if st.session_state.is_generating and ENGINE_READY:
         import time
         start_time = st.session_state.generation_start_time
         
-        # 检查任务结果队列
-        while st.session_state.generate_result.empty():
+        # 检查线程是否还在运行
+        while st.session_state.generate_thread and st.session_state.generate_thread.is_alive():
             elapsed = int(time.time() - start_time)
             progress = min(80, int(elapsed * 2))  # 模拟进度
             progress_bar.progress(progress)
@@ -270,32 +280,12 @@ if st.session_state.is_generating and ENGINE_READY:
             time.sleep(1)
             st.rerun()
         
-        # 任务完成，处理结果
-        result = st.session_state.generate_result.get()
-        progress_bar.progress(90)
-        status_text.text("💾 正在原子化落盘记忆...")
-        
-        if result["success"]:
-            elapsed_time = int(time.time() - start_time)
-            word_count = len(result["content"])
-            
-            st.session_state.current_output = result["content"]
-            st.session_state.generation_result = {
-                "chapter_num": result["chapter_num"],
-                "target_words": result["target_words"],
-                "real_words": word_count,
-                "elapsed_time": elapsed_time,
-                "novel_name": result["novel_name"],
-                "generate_time": time.strftime("%Y-%m-%d %H:%M:%S")
-            }
-
-            progress_bar.progress(100)
-            status_text.text(f"✅ 生成完成！耗时 {elapsed_time} 秒，实际字数 {word_count}")
-            st.success(f"🎉 第{result['chapter_num']}章生成完成！耗时 {elapsed_time} 秒，实际字数 {word_count}")
-        else:
-            progress_bar.progress(100)
-            status_text.text(f"❌ 生成失败：{result['content']}")
-            st.error(f"生成失败：{result['content']}")
+        # 任务完成
+        elapsed_time = int(time.time() - start_time)
+        progress_bar.progress(100)
+        status_text.text(f"✅ 生成完成！耗时 {elapsed_time} 秒")
+        st.success("🎉 章节生成完成！")
+        logger.info(f"生成任务已完成，耗时 {elapsed_time} 秒")
 
     except Exception as e:
         progress_bar.progress(100)
@@ -305,8 +295,8 @@ if st.session_state.is_generating and ENGINE_READY:
     finally:
         # 重置状态
         st.session_state.is_generating = False
-        global _task_result
-        _task_result = None
+        if hasattr(st.session_state, 'generate_lock') and st.session_state.generate_lock.locked():
+            st.session_state.generate_lock.release()
         time.sleep(1)
         st.rerun()
 

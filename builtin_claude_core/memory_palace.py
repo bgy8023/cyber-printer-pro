@@ -72,19 +72,22 @@ class SQLiteMemoryPalace:
 
     def _init_fixed_memory(self):
         self.fixed_memory = {}
-        for key, fname in [
-            ("outline", "00-全本大纲.md"),
-            ("character", "01-人物档案.md"),
-            ("worldview", "02-世界观设定.md"),
-            ("tomato_audit", "03-番茄审核铁则.md")
+        for key, fname, display_name in [
+            ("outline", "00-全本大纲.md", "全本大纲"),
+            ("character", "01-人物档案.md", "人物档案"),
+            ("worldview", "02-世界观设定.md", "世界观设定"),
+            ("tomato_audit", "03-番茄审核铁则.md", "番茄审核铁则")
         ]:
             fpath = os.path.join(self.base_dir, fname)
             if os.path.exists(fpath):
                 with open(fpath, "r", encoding="utf-8") as f:
-                    self.fixed_memory[key] = f.read()
+                    self.fixed_memory[key] = {
+                        "content": f.read(),
+                        "display_name": display_name
+                    }
 
     def get_fixed_prompt(self):
-        return "\n".join([f"## {k.upper()}\n{v}" for k, v in self.fixed_memory.items() if v])
+        return "\n".join([f"## {v['display_name']}\n{v['content']}" for k, v in self.fixed_memory.items() if v['content']])
 
     def get_dynamic_prompt(self, limit=3):
         try:
